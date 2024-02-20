@@ -150,18 +150,7 @@ impl From<InternalPort> for PortId {
 }
 
 /// An identifier for a physical switch port.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    Deserialize,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(untagged, try_from = "String", into = "String")]
 pub enum PortId {
     /// The CPU port on the Tofino (also called the AUX or Ethernet port).
@@ -247,21 +236,15 @@ impl JsonSchema for PortId {
         String::from("PortId")
     }
 
-    fn json_schema(
-        _: &mut schemars::gen::SchemaGenerator,
-    ) -> schemars::schema::Schema {
-        const QSFP_REGEX: &str =
-            r#"(^[qQ][sS][fF][pP](([0-9])|([1-2][0-9])|(3[0-1]))$)"#;
-        const REAR_REGEX: &str =
-            r#"(^[rR][eE][aA][rR](([0-9])|([1-2][0-9])|(3[0-1]))$)"#;
+    fn json_schema(_: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        const QSFP_REGEX: &str = r#"(^[qQ][sS][fF][pP](([0-9])|([1-2][0-9])|(3[0-1]))$)"#;
+        const REAR_REGEX: &str = r#"(^[rR][eE][aA][rR](([0-9])|([1-2][0-9])|(3[0-1]))$)"#;
         const INTERNAL_REGEX: &str = r#"(^[iI][nN][tT]0$)"#;
 
         schemars::schema::SchemaObject {
             metadata: Some(Box::new(schemars::schema::Metadata {
                 title: Some("PortId".to_string()),
-                description: Some(
-                    "Physical switch port identifier".to_string(),
-                ),
+                description: Some("Physical switch port identifier".to_string()),
                 examples: vec!["qsfp0".into()],
                 ..Default::default()
             })),
@@ -273,15 +256,11 @@ impl JsonSchema for PortId {
 
                             ..Default::default()
                         })),
-                        instance_type: Some(
-                            schemars::schema::InstanceType::String.into(),
-                        ),
-                        string: Some(Box::new(
-                            schemars::schema::StringValidation {
-                                pattern: Some(INTERNAL_REGEX.to_string()),
-                                ..Default::default()
-                            },
-                        )),
+                        instance_type: Some(schemars::schema::InstanceType::String.into()),
+                        string: Some(Box::new(schemars::schema::StringValidation {
+                            pattern: Some(INTERNAL_REGEX.to_string()),
+                            ..Default::default()
+                        })),
                         ..Default::default()
                     }
                     .into(),
@@ -291,15 +270,11 @@ impl JsonSchema for PortId {
 
                             ..Default::default()
                         })),
-                        instance_type: Some(
-                            schemars::schema::InstanceType::String.into(),
-                        ),
-                        string: Some(Box::new(
-                            schemars::schema::StringValidation {
-                                pattern: Some(REAR_REGEX.to_string()),
-                                ..Default::default()
-                            },
-                        )),
+                        instance_type: Some(schemars::schema::InstanceType::String.into()),
+                        string: Some(Box::new(schemars::schema::StringValidation {
+                            pattern: Some(REAR_REGEX.to_string()),
+                            ..Default::default()
+                        })),
                         ..Default::default()
                     }
                     .into(),
@@ -309,15 +284,11 @@ impl JsonSchema for PortId {
 
                             ..Default::default()
                         })),
-                        instance_type: Some(
-                            schemars::schema::InstanceType::String.into(),
-                        ),
-                        string: Some(Box::new(
-                            schemars::schema::StringValidation {
-                                pattern: Some(QSFP_REGEX.to_string()),
-                                ..Default::default()
-                            },
-                        )),
+                        instance_type: Some(schemars::schema::InstanceType::String.into()),
+                        string: Some(Box::new(schemars::schema::StringValidation {
+                            pattern: Some(QSFP_REGEX.to_string()),
+                            ..Default::default()
+                        })),
                         ..Default::default()
                     }
                     .into(),
@@ -388,9 +359,7 @@ impl Ord for Ipv4Entry {
 
 impl Eq for Ipv4Entry {}
 
-#[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema)]
 pub enum PortMedia {
     Copper,
     Optical,
@@ -411,9 +380,7 @@ impl fmt::Display for PortMedia {
     }
 }
 
-#[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema)]
 pub enum PortFec {
     None,
     Firecode,
@@ -444,9 +411,7 @@ impl fmt::Display for PortFec {
 }
 
 /// Speeds with which a single port may be configured
-#[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema)]
 pub enum PortSpeed {
     Speed0G,
     Speed1G,
@@ -501,9 +466,7 @@ pub struct PortSpeedFec {
 }
 
 /// Legal PRBS modes
-#[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema,
-)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Deserialize, Serialize, JsonSchema)]
 pub enum PortPrbsMode {
     Mode31,
     Mode23,

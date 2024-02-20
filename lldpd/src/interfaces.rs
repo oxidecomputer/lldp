@@ -15,8 +15,6 @@ use slog::warn;
 use tokio::process::Command;
 use tokio::sync::oneshot;
 
-use common::ports::PortId;
-use dpd_client::types::LinkId;
 use packet::Packet;
 
 use crate::protocol;
@@ -65,9 +63,7 @@ async fn get_links() -> LldpdResult<BTreeMap<String, String>> {
     let mut rval = BTreeMap::new();
     let mut idx = 0;
     for line in std::str::from_utf8(&out.stdout)
-        .map_err(|e| {
-            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-        })?
+        .map_err(|e| LldpdError::Other(format!("while reading dladm outout: {e:?}")))?
         .lines()
     {
         idx += 1;
@@ -91,18 +87,13 @@ async fn get_mac(dladm_args: Vec<&str>) -> LldpdResult<MacAddr> {
         )));
     }
     let lines: Vec<&str> = std::str::from_utf8(&out.stdout)
-        .map_err(|e| {
-            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-        })?
+        .map_err(|e| LldpdError::Other(format!("while reading dladm outout: {e:?}")))?
         .lines()
         .collect();
     if lines.len() == 1 {
         let mac = lines[0];
-        mac.parse::<MacAddr>().map_err(|e| {
-            LldpdError::Other(format!(
-                "failed to parse mac address {mac}: {e:?}"
-            ))
-        })
+        mac.parse::<MacAddr>()
+            .map_err(|e| LldpdError::Other(format!("failed to parse mac address {mac}: {e:?}")))
     } else {
         Err(LldpdError::Other("invalid dladm output".to_string()))
     }
@@ -149,11 +140,7 @@ fn pcap_open_duplex(iface: &str) -> LldpdResult<(pcap::Pcap, pcap::Pcap)> {
     Ok((pcap_in, pcap_out))
 }
 
-pub fn build_lldpdu(
-    switchinfo: &crate::SwitchInfo,
-    name: &str,
-    iface: &Interface,
-) -> Lldpdu {
+pub fn build_lldpdu(switchinfo: &crate::SwitchInfo, name: &str, iface: &Interface) -> Lldpdu {
     let chassis_id = match &iface.chassis_id {
         Some(c) => c.to_string(),
         None => switchinfo.chassis_id.to_string(),
@@ -208,15 +195,8 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
     let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
     let tgt = packet::L2Endpoint::new(tgt_mac);
     let src = packet::L2Endpoint::new(iface.mac);
-    let mut packet = Packet::gen(
-        src.into(),
-        tgt.into(),
-        vec![packet::eth::ETHER_LLDP],
-        None,
-    )
-    .map_err(|e| {
-        LldpdError::Other(format!("while building LLDP packet: {e:?}"))
-    })?;
+    let mut packet = Packet::gen(src.into(), tgt.into(), vec![packet::eth::ETHER_LLDP], None)
+        .map_err(|e| LldpdError::Other(format!("while building LLDP packet: {e:?}")))?;
 
     packet.hdrs.lldp_hdr = Some(
         (&lldpdu)
@@ -232,17 +212,11 @@ async fn xmit_lldpdu(pcap: &pcap::Pcap, packet: Packet) -> LldpdResult<i32> {
         Ok(data) => pcap
             .send(&data)
             .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into()),
-        Err(e) => {
-            Err(anyhow!("unable to deparse {:?}: {:?}", packet, e).into())
-        }
+        Err(e) => Err(anyhow!("unable to deparse {:?}: {:?}", packet, e).into()),
     }
 }
 
-fn try_add(
-    g: &Global,
-    name: &str,
-    interface: Option<Interface>,
-) -> LldpdResult<()> {
+fn try_add(g: &Global, name: &str, interface: Option<Interface>) -> LldpdResult<()> {
     let mut iface_hash = g.interfaces.lock().unwrap();
     if iface_hash.get(name).is_some() {
         return Err(LldpdError::Exists("interface already added".into()));
@@ -395,36 +369,13 @@ async fn interface_loop(
     interface_remove(&g, &name);
 }
 
-fn parse_link_name(name: &str) -> LldpdResult<(PortId, LinkId)> {
-    let Some((port_id, link_id)) = name.split_once('/') else {
-        return Err(LldpdError::Invalid(format!(
-            "Invalid switch port or link ID: {name}"
-        )));
-    };
-    let Ok(port_id) = PortId::try_from(port_id) else {
-        return Err(LldpdError::Invalid(format!(
-            "Invalid switch port: {port_id}"
-        )));
-    };
-    let Ok(link_id) = link_id.parse() else {
-        return Err(LldpdError::Invalid(format!("Invalid link ID: {link_id}")));
-    };
-    Ok((port_id, link_id))
-}
+#[allow(unused_variables)]
+async fn get_iface_mac(g: &Global, name: &str) -> LldpdResult<(String, MacAddr)> {
+    #[cfg(feature = "dendrite")]
+    if name.contains('/') {
+        return crate::dendrite::dpd_tfport(g, &name).await;
+    }
 
-async fn dpd_tfport(g: &Global, name: &str) -> LldpdResult<(String, MacAddr)> {
-    let (port_id, link_id) = parse_link_name(name)?;
-    let client = g.dpd.as_ref().ok_or(LldpdError::NoDpd)?;
-    let link_info = client
-        .link_get(&port_id, &link_id)
-        .await
-        .map_err(|e| LldpdError::DpdClientError(e.to_string()))?;
-    let iface = format!("tfport{}_{}", port_id, link_id.to_string());
-    let mac = link_info.into_inner().address;
-    Ok((iface, mac.into()))
-}
-
-async fn local_port(name: &str) -> LldpdResult<(String, MacAddr)> {
     let links = get_links().await?;
     let iface = name.to_string();
     let mac = match links.get(name).map(|t| t.as_str()) {
@@ -433,9 +384,7 @@ async fn local_port(name: &str) -> LldpdResult<(String, MacAddr)> {
         Some("tfport") => Err(LldpdError::Invalid(
             "cannot use LLDP with a tfport - use the sidecar link".into(),
         )),
-        Some(x) => {
-            Err(LldpdError::Invalid(format!("cannot use LLDP on {x} links")))
-        }
+        Some(x) => Err(LldpdError::Invalid(format!("cannot use LLDP on {x} links"))),
         None => Err(LldpdError::Missing("no such link".into())),
     }?;
     Ok((iface, mac))
@@ -455,11 +404,7 @@ pub async fn interface_add(
     info!(&global.log, "Adding interface"; "name" => name.to_string());
     try_add(global, &name, None)?;
 
-    let (iface, mac) = if name.contains('/') {
-        dpd_tfport(global, &name).await
-    } else {
-        local_port(&name).await
-    }?;
+    let (iface, mac) = get_iface_mac(global, &name).await?;
 
     let (exit_tx, exit_rx) = oneshot::channel();
     let interface = Interface {
@@ -478,8 +423,7 @@ pub async fn interface_add(
 
     try_add(global, &name, Some(interface))?;
     let global = global.clone();
-    let _hdl = tokio::task::spawn(async move {
-        interface_loop(global, name, iface, exit_rx).await
-    });
+    let _hdl =
+        tokio::task::spawn(async move { interface_loop(global, name, iface, exit_rx).await });
     Ok(())
 }

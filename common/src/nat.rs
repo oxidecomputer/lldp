@@ -12,17 +12,7 @@ use crate::network::MacAddr;
 /// encapsulated using the Generic Network Virtualization Encapsulation (Geneve)
 /// protocol (RFC 8926).
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Hash,
-    JsonSchema,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Serialize,
+    Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, PartialOrd, Ord, Serialize,
 )]
 #[serde(try_from = "u32")]
 pub struct Vni(u32);
@@ -73,9 +63,7 @@ impl fmt::Display for Vni {
 }
 
 /** represents an internal NAT target */
-#[derive(
-    Debug, Copy, Clone, Deserialize, Serialize, JsonSchema, Eq, PartialEq,
-)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize, JsonSchema, Eq, PartialEq)]
 pub struct NatTarget {
     pub internal_ip: Ipv6Addr,
     pub inner_mac: MacAddr,
@@ -99,9 +87,7 @@ pub struct Ipv6Nat {
 
 impl PartialEq for Ipv6Nat {
     fn eq(&self, other: &Self) -> bool {
-        self.external == other.external
-            && self.low == other.low
-            && self.high == other.high
+        self.external == other.external && self.low == other.low && self.high == other.high
     }
 }
 
@@ -116,9 +102,7 @@ pub struct Ipv4Nat {
 
 impl PartialEq for Ipv4Nat {
     fn eq(&self, other: &Self) -> bool {
-        self.external == other.external
-            && self.low == other.low
-            && self.high == other.high
+        self.external == other.external && self.low == other.low && self.high == other.high
     }
 }
 

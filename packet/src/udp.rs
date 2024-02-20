@@ -101,9 +101,7 @@ impl crate::Protocol for UdpHdr {
         let udp_src = L4Endpoint::try_from(src)?;
         let udp_dst = L4Endpoint::try_from(dst)?;
         let mut pkt = match udp_dst.port {
-            geneve::GENEVE_UDP_PORT => {
-                geneve::GeneveHdr::gen(src, dst, protos, body)?
-            }
+            geneve::GENEVE_UDP_PORT => geneve::GeneveHdr::gen(src, dst, protos, body)?,
             _ => Packet::new(body),
         };
 

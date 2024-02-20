@@ -174,11 +174,7 @@ impl Endpoint {
     // To do that, the calls need to be recast as closures, which makes clippy
     // complain about "redundant closures".
     #[allow(clippy::or_fun_call)]
-    pub fn new(
-        mac: MacAddr,
-        ip: Option<IpAddr>,
-        port: Option<u16>,
-    ) -> Endpoint {
+    pub fn new(mac: MacAddr, ip: Option<IpAddr>, port: Option<u16>) -> Endpoint {
         if let Some(ip) = ip {
             if let Some(port) = port {
                 Endpoint::L4(L4Endpoint { mac, ip, port })
@@ -208,9 +204,7 @@ impl Endpoint {
 
     pub fn get_ip(self, which: &str) -> PacketResult<IpAddr> {
         match self {
-            Endpoint::L2(_) => {
-                Err(invalid_error(format!("{which} IP address missing")))
-            }
+            Endpoint::L2(_) => Err(invalid_error(format!("{which} IP address missing"))),
             Endpoint::L3(e) => Ok(e.ip),
             Endpoint::L4(e) => Ok(e.ip),
         }
@@ -219,18 +213,14 @@ impl Endpoint {
     pub fn get_ipv4(self, which: &str) -> PacketResult<Ipv4Addr> {
         match self.get_ip(which)? {
             IpAddr::V4(ip) => Ok(ip),
-            IpAddr::V6(_) => {
-                Err(invalid_error(format!("{which} is IPv6 - need IPv4")))
-            }
+            IpAddr::V6(_) => Err(invalid_error(format!("{which} is IPv6 - need IPv4"))),
         }
     }
 
     pub fn get_ipv6(self, which: &str) -> PacketResult<Ipv6Addr> {
         match self.get_ip(which)? {
             IpAddr::V6(ip) => Ok(ip),
-            IpAddr::V4(_) => {
-                Err(invalid_error(format!("{which} is IPv4 - need IPv6")))
-            }
+            IpAddr::V4(_) => Err(invalid_error(format!("{which} is IPv4 - need IPv6"))),
         }
     }
 
@@ -295,9 +285,7 @@ impl TryFrom<Endpoint> for L4Endpoint {
 
     fn try_from(e: Endpoint) -> Result<Self, Self::Error> {
         match e {
-            Endpoint::L2(_) | Endpoint::L3(_) => {
-                Err(invalid_error("not an L4 endpoint"))
-            }
+            Endpoint::L2(_) | Endpoint::L3(_) => Err(invalid_error("not an L4 endpoint")),
             Endpoint::L4(e) => Ok(e),
         }
     }
@@ -372,11 +360,7 @@ pub struct Packet {
 
 impl PartialEq for Packet {
     fn eq(&self, other: &Self) -> bool {
-        fn test<T: PartialEq + Debug>(
-            _name: &str,
-            a: Option<T>,
-            b: Option<T>,
-        ) -> bool {
+        fn test<T: PartialEq + Debug>(_name: &str, a: Option<T>, b: Option<T>) -> bool {
             if a.is_none() && b.is_none() {
                 true
             } else if a.is_some() && b.is_some() {
@@ -402,8 +386,7 @@ impl PartialEq for Packet {
         is_eq &= test("tcp hdr", a.tcp_hdr.as_ref(), b.tcp_hdr.as_ref());
         is_eq &= test("arp hdr", a.arp_hdr.as_ref(), b.arp_hdr.as_ref());
         is_eq &= test("icmp hdr", a.icmp_hdr.as_ref(), b.icmp_hdr.as_ref());
-        is_eq &=
-            test("geneve hdr", a.geneve_hdr.as_ref(), b.geneve_hdr.as_ref());
+        is_eq &= test("geneve hdr", a.geneve_hdr.as_ref(), b.geneve_hdr.as_ref());
         is_eq
     }
 }

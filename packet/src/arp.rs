@@ -165,11 +165,7 @@ impl fmt::Debug for ArpHdr {
         write!(
             f,
             "arp htype: {} hlen: {} ptype: {} plen: {} op: {}",
-            self.arp_htype,
-            self.arp_hlen,
-            self.arp_ptype,
-            self.arp_plen,
-            self.arp_op
+            self.arp_htype, self.arp_hlen, self.arp_ptype, self.arp_plen, self.arp_op
         )
     }
 }

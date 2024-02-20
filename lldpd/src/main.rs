@@ -18,17 +18,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use anyhow::Context;
-use crucible_smf::PropertyGroup;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
-use slog::debug;
-use slog::error;
 use slog::info;
 use structopt::StructOpt;
-
-use dpd_client::Client;
-use dpd_client::ClientState;
 
 use interfaces::Interface;
 use neighbors::Neighbor;
@@ -37,9 +30,13 @@ use types::LldpdError;
 use types::LldpdResult;
 
 mod api_server;
+#[cfg(feature = "dendrite")]
+mod dendrite;
 mod interfaces;
 mod neighbors;
 mod protocol;
+#[cfg(feature = "smf")]
+mod smf;
 mod types;
 
 /// All global state for the lldpd daemon
@@ -47,7 +44,8 @@ pub struct Global {
     /// Root of the tree of loggers
     pub log: slog::Logger,
     /// Client connection to dpd
-    pub dpd: Option<Client>,
+    #[cfg(feature = "dendrite")]
+    pub dpd: Option<dpd_client::Client>,
     /// Information about this system
     pub switchinfo: Mutex<SwitchInfo>,
     /// List of addresses on which the api_server should listen.
@@ -61,9 +59,14 @@ unsafe impl Send for Global {}
 unsafe impl Sync for Global {}
 
 impl Global {
-    fn new(log: &slog::Logger, dpd_client: Option<Client>, switchinfo: SwitchInfo) -> Self {
+    fn new(
+        log: &slog::Logger,
+        switchinfo: SwitchInfo,
+        #[cfg(feature = "dendrite")] dpd_client: Option<dpd_client::Client>,
+    ) -> Self {
         Global {
             log: log.clone(),
+            #[cfg(feature = "dendrite")]
             dpd: dpd_client,
             switchinfo: Mutex::new(switchinfo),
             listen_addresses: Mutex::new(Vec::new()),
@@ -104,10 +107,13 @@ pub(crate) struct Opt {
     log_format: common::logging::LogFormat,
 
     #[structopt(long, help = "run without dpd")]
+    #[cfg(feature = "dendrite")]
     no_dpd: bool,
     #[structopt(long, about = "dpd host name/addr")]
+    #[cfg(feature = "dendrite")]
     host: Option<String>,
     #[structopt(long, about = "dpd port number")]
+    #[cfg(feature = "dendrite")]
     port: Option<u16>,
 
     #[structopt(
@@ -128,101 +134,7 @@ pub(crate) struct Opt {
     system_description: Option<String>,
 }
 
-// Given a property name within a group, return all the associated values as
-// a vec of strings.
-fn get_properties(config: &PropertyGroup, name: &str) -> LldpdResult<Vec<String>> {
-    let prop = config
-        .get_property(name)
-        .map_err(|e| LldpdError::Smf(format!("failed to get '{name}' property: {e:?}")))?;
-
-    let mut rval = Vec::new();
-    if let Some(values) = prop {
-        for value in values
-            .values()
-            .map_err(|e| LldpdError::Smf(format!("failed to get values for '{name}': {e:?}")))?
-        {
-            let value = value
-                .map_err(|e| LldpdError::Smf(format!("failed to get value for '{name}': {e:?}")))?
-                .as_string()
-                .map_err(|e| {
-                    LldpdError::Smf(format!("failed to convert value '{name}' to string: {e:?}"))
-                })?;
-            if value != "unknown" {
-                rval.push(value);
-            }
-        }
-    }
-
-    Ok(rval)
-}
-
-fn refresh_smf_config(g: &Global) -> LldpdResult<()> {
-    const SMF_SCRIMLET_ID_PROP: &str = "scrimlet_id";
-    const SMF_SCRIMLET_MODEL_PROP: &str = "scrimlet_model";
-    const SMF_BOARD_REV_PROP: &str = "board_rev";
-    const SMF_ADDRESS_PROP: &str = "address";
-
-    debug!(&g.log, "refreshing SMF configuration data");
-
-    // Create an SMF context and take a snapshot of the current settings
-    let scf = crucible_smf::Scf::new().context("creating scf handle")?;
-    let instance = scf.get_self_instance().context("getting smf instance")?;
-    let snapshot = instance
-        .get_running_snapshot()
-        .context("getting running snapshot")?;
-
-    // All the properties relevant to us fall under the "config" property group
-    let pg = match snapshot
-        .get_pg("config")
-        .context("getting 'config' propertygroup")?
-    {
-        Some(c) => c,
-        None => return Ok(()),
-    };
-
-    if let Ok(addresses) = get_properties(&pg, SMF_ADDRESS_PROP) {
-        debug!(g.log, "config/{SMF_ADDRESS_PROP}: {addresses:?}");
-        let mut listen_addresses = Vec::new();
-        for addr in addresses {
-            match addr.parse() {
-                Ok(a) => listen_addresses.push(a),
-                Err(e) => error!(
-                    g.log,
-                    "bad socket address {} in smf config/{}: {:?}", addr, SMF_ADDRESS_PROP, e
-                ),
-            }
-        }
-        *(g.listen_addresses.lock().unwrap()) = listen_addresses;
-    }
-
-    let mut s = g.switchinfo.lock().unwrap();
-    if let Ok(id) = get_properties(&pg, SMF_SCRIMLET_ID_PROP) {
-        debug!(g.log, "config/{SMF_SCRIMLET_ID_PROP}: {id:?}");
-        if !id.is_empty() {
-            s.chassis_id = id[0].clone();
-            s.system_name = id[0].clone();
-        }
-    }
-    let mut desc = Vec::new();
-    if let Ok(model) = get_properties(&pg, SMF_SCRIMLET_MODEL_PROP) {
-        debug!(g.log, "config/{SMF_SCRIMLET_MODEL_PROP}: {model:?}");
-        if !model.is_empty() {
-            desc.push(format!("Oxide sled model: {}", model[0]));
-        }
-    }
-    if let Ok(board) = get_properties(&pg, SMF_BOARD_REV_PROP) {
-        debug!(g.log, "config/{SMF_BOARD_REV_PROP}: {board:?}");
-        if !board.is_empty() {
-            desc.push(format!("Sidecar revision: {}", board[0]));
-        }
-    }
-    if !desc.is_empty() {
-        s.system_description = desc.join(", ");
-    }
-
-    Ok(())
-}
-
+#[allow(unused_variables)]
 fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
     const SIGNALS: &[std::ffi::c_int] = &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR2];
     let mut sigs = Signals::new(SIGNALS).unwrap();
@@ -233,33 +145,15 @@ fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
         if signal == SIGINT || signal == SIGQUIT || signal == SIGTERM {
             break;
         }
+        #[cfg(feature = "smf")]
         if signal == SIGUSR2 && std::env::var("SMF_FMRI").is_ok() {
-            match refresh_smf_config(&g) {
+            match smf::refresh_smf_config(&g) {
                 Ok(()) => _ = smf_tx.send(()),
                 Err(e) => {
-                    error!(&log, "While updating the SMF config: {e:?}")
+                    slog::error!(&log, "While updating the SMF config: {e:?}")
                 }
             }
         }
-    }
-}
-
-async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
-    let mut warn_at = 0;
-    let mut warn_delay = 1;
-    let mut iter = 0;
-
-    loop {
-        if let Ok(version) = client.dpd_version().await {
-            return version.into_inner();
-        }
-        if iter >= warn_at {
-            error!(log, "Failed to connect to dpd.  Retrying...");
-            warn_at += warn_delay;
-            warn_delay = std::cmp::min(60, warn_delay * 2);
-        }
-        iter += 1;
-        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -292,44 +186,30 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
 }
 
 async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
-    const CLIENT_NAME: &str = "lldpd";
-    let log = common::logging::init(CLIENT_NAME, &opts.log_file, opts.log_format)?;
+    let log = common::logging::init("lldpd", &opts.log_file, opts.log_format)?;
 
     let switchinfo = get_switchinfo(&opts);
     println!("switchinfo: {switchinfo:#?}");
 
-    let client = if opts.no_dpd {
-        None
-    } else {
-        let host = opts.host.unwrap_or_else(|| "localhost".to_string());
-        let port = opts.port.unwrap_or_else(|| dpd_client::DEFAULT_PORT);
-        info!(log, "connecting to dpd at {host}:{port}");
-        let client_state = ClientState {
-            tag: String::from(CLIENT_NAME),
-            log: log.new(slog::o!("unit" => "lldpd-client")),
-        };
-        let client = Client::new(&format!("http://{host}:{port}"), client_state);
-
-        info!(
-            log,
-            "connected to dpd running {}",
-            dpd_version(&log, &client).await
-        );
-        Some(client)
-    };
-
-    let global = Arc::new(Global::new(&log, client, switchinfo));
-    if let Err(e) = refresh_smf_config(&global) {
-        error!(&log, "while loading SMF config: {e:?}");
-    }
-
-    let (smf_tx, smf_rx) = tokio::sync::watch::channel(());
-    let api_server_manager = tokio::task::spawn(api_server::api_server_manager(
-        global.clone(),
-        smf_rx.clone(),
+    let global = Arc::new(Global::new(
+        &log,
+        switchinfo.clone(),
+        #[cfg(feature = "dendrite")]
+        dendrite::dpd_init(&log, opts).await,
     ));
 
-    signal_handler(global.clone(), smf_tx);
+    #[cfg(feature = "smf")]
+    if let Err(e) = smf::refresh_smf_config(&global) {
+        slog::error!(&log, "while loading SMF config: {e:?}");
+    }
+
+    let (api_tx, api_rx) = tokio::sync::watch::channel(());
+    let api_server_manager = tokio::task::spawn(api_server::api_server_manager(
+        global.clone(),
+        api_rx.clone(),
+    ));
+
+    signal_handler(global.clone(), api_tx);
 
     api_server_manager
         .await

@@ -154,11 +154,7 @@ impl Protocol for LldpHdr {
     }
 }
 
-pub fn add_tlv(
-    packet: &mut Packet,
-    tlv_type: impl Into<u8>,
-    tlv_data: &[u8],
-) -> PacketResult<()> {
+pub fn add_tlv(packet: &mut Packet, tlv_type: impl Into<u8>, tlv_data: &[u8]) -> PacketResult<()> {
     if let Some(lldp) = &mut packet.hdrs.lldp_hdr {
         lldp.lldp_data
             .push(LldpTlv::new(tlv_type.into(), tlv_data)?);

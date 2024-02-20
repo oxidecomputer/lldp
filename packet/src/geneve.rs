@@ -35,10 +35,7 @@ impl Protocol for GeneveHdr {
         // The header has a fixed 8 bytes, followed by a variable length
         // header.
         if pb.left() < GENEVE_HDR_SZ * 8 {
-            return Err(crate::parse_error(
-                pb,
-                "geneve fixed header too short",
-            ));
+            return Err(crate::parse_error(pb, "geneve fixed header too short"));
         }
         let version = pb.get_bits(2) as u8;
         let opt_len = pb.get_bits(6) as u8;

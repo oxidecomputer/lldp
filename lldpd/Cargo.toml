@@ -3,6 +3,10 @@ name = "lldpd"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+dendrite = []
+smf = []
+
 [dependencies]
 packet.workspace = true
 pcap.workspace = true
@@ -10,8 +14,6 @@ pcap.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 common.workspace = true
-crucible-smf.workspace = true
-dpd-client.workspace = true
 dropshot.workspace = true
 http.workspace = true
 signal-hook.workspace = true
@@ -21,6 +23,9 @@ slog.workspace = true
 structopt.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+
+dpd-client.workspace = true
+crucible-smf.workspace = true
 
 [build-dependencies]
 anyhow.workspace = true

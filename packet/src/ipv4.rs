@@ -46,10 +46,7 @@ impl Ipv4Hdr {
         v
     }
 
-    fn deparse_into(
-        ipv4_hdr: &Ipv4Hdr,
-        mut v: bytes::BytesMut,
-    ) -> bytes::BytesMut {
+    fn deparse_into(ipv4_hdr: &Ipv4Hdr, mut v: bytes::BytesMut) -> bytes::BytesMut {
         v.put_u8(ipv4_hdr.ipv4_version << 4 | ipv4_hdr.ipv4_hdr_len);
         v.put_u8(ipv4_hdr.ipv4_dscp << 2 | ipv4_hdr.ipv4_ecn);
         v.put_u16(ipv4_hdr.ipv4_total_len);
@@ -259,11 +256,7 @@ impl fmt::Display for Ipv4Hdr {
         write!(
             f,
             "ipv4 src: {} dst: {} ttl: {} proto: {} bytes: {}",
-            self.ipv4_src_ip,
-            self.ipv4_dst_ip,
-            self.ipv4_ttl,
-            self.ipv4_proto,
-            self.ipv4_total_len
+            self.ipv4_src_ip, self.ipv4_dst_ip, self.ipv4_ttl, self.ipv4_proto, self.ipv4_total_len
         )
     }
 }

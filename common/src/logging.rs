@@ -34,14 +34,12 @@ pub fn init(
                 .open(log_file)?;
             match log_format {
                 LogFormat::Json => {
-                    let drain =
-                        slog_bunyan::with_name(name, log_file).build().fuse();
+                    let drain = slog_bunyan::with_name(name, log_file).build().fuse();
                     slog_async::Async::new(drain).build().fuse()
                 }
                 LogFormat::Human => {
                     let decorator = slog_term::PlainDecorator::new(log_file);
-                    let drain =
-                        slog_term::FullFormat::new(decorator).build().fuse();
+                    let drain = slog_term::FullFormat::new(decorator).build().fuse();
                     slog_async::Async::new(drain).build().fuse()
                 }
             }
@@ -58,8 +56,7 @@ pub fn init(
             }
             LogFormat::Human => {
                 let decorator = slog_term::TermDecorator::new().build();
-                let drain =
-                    slog_term::FullFormat::new(decorator).build().fuse();
+                let drain = slog_term::FullFormat::new(decorator).build().fuse();
                 slog_async::Async::new(drain)
                     .chan_size(32768)
                     .build()

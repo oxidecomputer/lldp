@@ -46,9 +46,7 @@ impl Protocol for SidecarHdr {
             eth::ETHER_IPV4 => ipv4::Ipv4Hdr::parse(pb),
             eth::ETHER_IPV6 => ipv6::Ipv6Hdr::parse(pb),
             eth::ETHER_LLDP => lldp::LldpHdr::parse(pb),
-            eth::ETHER_SIDECAR => {
-                Err(crate::parse_error(pb, "nested sidecar headers"))
-            }
+            eth::ETHER_SIDECAR => Err(crate::parse_error(pb, "nested sidecar headers")),
             _ => {
                 //   println!("unsupported ethertype: {:x}", hdr.sc_ether_type);
                 Ok(Headers::new())

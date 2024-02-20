@@ -136,10 +136,7 @@ impl ParseBuffer<'_> {
         let b = &self.data[self.byte..];
         self.byte += 4;
 
-        (b[0] as u32) << 24
-            | (b[1] as u32) << 16
-            | (b[2] as u32) << 8
-            | (b[3] as u32)
+        (b[0] as u32) << 24 | (b[1] as u32) << 16 | (b[2] as u32) << 8 | (b[3] as u32)
     }
 
     pub fn get_u16(&mut self) -> u16 {

@@ -38,18 +38,7 @@ pub fn generate_ipv6_link_local(mac: MacAddr) -> Ipv6Addr {
 }
 
 /// An IP subnet with a network prefix and prefix length.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Serialize,
-)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum Cidr {
     V4(Ipv4Cidr),
@@ -65,9 +54,7 @@ impl JsonSchema for Cidr {
         "Cidr".to_string()
     }
 
-    fn json_schema(
-        gen: &mut schemars::gen::SchemaGenerator,
-    ) -> schemars::schema::Schema {
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             subschemas: Some(Box::new(schemars::schema::SubschemaValidation {
                 one_of: Some(vec![
@@ -85,10 +72,7 @@ impl JsonSchema for Cidr {
 // Insert another level of schema indirection in order to provide an
 // additional title for a subschema. This allows generators to infer a better
 // variant name for an "untagged" enum.
-fn label_schema(
-    label: &str,
-    schema: schemars::schema::Schema,
-) -> schemars::schema::Schema {
+fn label_schema(label: &str, schema: schemars::schema::Schema) -> schemars::schema::Schema {
     schemars::schema::SchemaObject {
         metadata: Some(
             schemars::schema::Metadata {
@@ -166,11 +150,10 @@ impl<'de> serde::Deserialize<'de> for Ipv4Cidr {
     where
         D: serde::Deserializer<'de>,
     {
-        String::deserialize(deserializer)?.as_str().parse().map_err(
-            |e: <Self as FromStr>::Err| {
-                <D::Error as serde::de::Error>::custom(e)
-            },
-        )
+        String::deserialize(deserializer)?
+            .as_str()
+            .parse()
+            .map_err(|e: <Self as FromStr>::Err| <D::Error as serde::de::Error>::custom(e))
     }
 }
 
@@ -188,16 +171,11 @@ impl JsonSchema for Ipv4Cidr {
         String::from("Ipv4Cidr")
     }
 
-    fn json_schema(
-        _: &mut schemars::gen::SchemaGenerator,
-    ) -> schemars::schema::Schema {
+    fn json_schema(_: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             metadata: Some(Box::new(schemars::schema::Metadata {
                 title: Some("An IPv4 subnet".to_string()),
-                description: Some(
-                    "An IPv4 subnet, including prefix and subnet mask"
-                        .to_string(),
-                ),
+                description: Some("An IPv4 subnet, including prefix and subnet mask".to_string()),
                 examples: vec!["192.168.1.0/24".into()],
                 ..Default::default()
             })),
@@ -296,13 +274,11 @@ impl FromStr for Ipv4Cidr {
         let Some((maybe_prefix, maybe_prefix_len)) = s.split_once('/') else {
             return Err(CidrError::InvalidIpv4Cidr(s.to_string()));
         };
-        let prefix = maybe_prefix.parse().map_err(|_| {
-            CidrError::InvalidIpv4Cidr(format!("bad prefix: {maybe_prefix}"))
-        })?;
+        let prefix = maybe_prefix
+            .parse()
+            .map_err(|_| CidrError::InvalidIpv4Cidr(format!("bad prefix: {maybe_prefix}")))?;
         let prefix_len = maybe_prefix_len.parse().map_err(|_| {
-            CidrError::InvalidIpv4Cidr(format!(
-                "bad prefix len: {maybe_prefix_len}"
-            ))
+            CidrError::InvalidIpv4Cidr(format!("bad prefix len: {maybe_prefix_len}"))
         })?;
         if prefix_len <= 32 {
             Ok(Ipv4Cidr { prefix, prefix_len })
@@ -326,9 +302,7 @@ impl TryFrom<Cidr> for Ipv4Cidr {
     fn try_from(cidr: Cidr) -> Result<Self, Self::Error> {
         match cidr {
             Cidr::V4(c) => Ok(c),
-            Cidr::V6(_) => {
-                Err(CidrError::InvalidIpv4Cidr(format!("{cidr} is IPv6")))
-            }
+            Cidr::V6(_) => Err(CidrError::InvalidIpv4Cidr(format!("{cidr} is IPv6"))),
         }
     }
 }
@@ -346,11 +320,9 @@ impl<'de> serde::Deserialize<'de> for Ipv6Cidr {
     where
         D: serde::Deserializer<'de>,
     {
-        String::deserialize(deserializer)?.parse().map_err(
-            |e: <Self as FromStr>::Err| {
-                <D::Error as serde::de::Error>::custom(e)
-            },
-        )
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(|e: <Self as FromStr>::Err| <D::Error as serde::de::Error>::custom(e))
     }
 }
 
@@ -367,16 +339,11 @@ impl JsonSchema for Ipv6Cidr {
         String::from("Ipv6Cidr")
     }
 
-    fn json_schema(
-        _: &mut schemars::gen::SchemaGenerator,
-    ) -> schemars::schema::Schema {
+    fn json_schema(_: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             metadata: Some(Box::new(schemars::schema::Metadata {
                 title: Some("An IPv6 subnet".to_string()),
-                description: Some(
-                    "An IPv6 subnet, including prefix and subnet mask"
-                        .to_string(),
-                ),
+                description: Some("An IPv6 subnet, including prefix and subnet mask".to_string()),
                 examples: vec!["fe80::/10".into()],
                 ..Default::default()
             })),
@@ -407,8 +374,7 @@ mod ipv6_tests {
     #[test]
     fn test_cidrv6_contains() {
         let cidr: Ipv6Cidr = "fc00:aabb:ccdd:18::/64".parse().unwrap();
-        let a: Ipv6Addr =
-            "fc00:aabb:ccdd:18:240:54ff:fe08:808".parse().unwrap();
+        let a: Ipv6Addr = "fc00:aabb:ccdd:18:240:54ff:fe08:808".parse().unwrap();
         let b: Ipv6Addr = "fc00:aabb:ccdd:18:240:54ff::0".parse().unwrap();
         let c: Ipv6Addr = "fc00:aabb:ccdd:18::0".parse().unwrap();
         let d: Ipv6Addr = "fc00:aabb:cc::0".parse().unwrap();
@@ -447,21 +413,18 @@ impl FromStr for Ipv6Cidr {
     type Err = CidrError;
 
     fn from_str(s: &str) -> Result<Self, CidrError> {
-        let Some((mut maybe_prefix, maybe_prefix_len)) = s.split_once('/')
-        else {
+        let Some((mut maybe_prefix, maybe_prefix_len)) = s.split_once('/') else {
             return Err(CidrError::InvalidIpv6Cidr(s.to_string()));
         };
         // strip out any link name in the prefix
         if maybe_prefix.contains('%') {
             (maybe_prefix, _) = maybe_prefix.split_once('%').unwrap();
         }
-        let prefix = maybe_prefix.parse().map_err(|_| {
-            CidrError::InvalidIpv6Cidr(format!("bad prefix: {maybe_prefix}"))
-        })?;
+        let prefix = maybe_prefix
+            .parse()
+            .map_err(|_| CidrError::InvalidIpv6Cidr(format!("bad prefix: {maybe_prefix}")))?;
         let prefix_len = maybe_prefix_len.parse().map_err(|_| {
-            CidrError::InvalidIpv6Cidr(format!(
-                "bad prefix len: {maybe_prefix_len}"
-            ))
+            CidrError::InvalidIpv6Cidr(format!("bad prefix len: {maybe_prefix_len}"))
         })?;
         if prefix_len <= 128 {
             Ok(Ipv6Cidr { prefix, prefix_len })
@@ -479,9 +442,7 @@ impl TryFrom<Cidr> for Ipv6Cidr {
     fn try_from(cidr: Cidr) -> Result<Self, Self::Error> {
         match cidr {
             Cidr::V6(c) => Ok(c),
-            Cidr::V4(_) => {
-                Err(CidrError::InvalidIpv6Cidr(format!("{cidr} is IPv4")))
-            }
+            Cidr::V4(_) => Err(CidrError::InvalidIpv6Cidr(format!("{cidr} is IPv4"))),
         }
     }
 }
@@ -493,18 +454,7 @@ impl From<Ipv6Cidr> for Cidr {
 }
 
 /// An EUI-48 MAC address, used for layer-2 addressing.
-#[derive(
-    Copy,
-    Deserialize,
-    Serialize,
-    JsonSchema,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-)]
+#[derive(Copy, Deserialize, Serialize, JsonSchema, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct MacAddr {
     a: [u8; 6],
 }
@@ -621,8 +571,7 @@ impl FromStr for MacAddr {
             std::cmp::Ordering::Equal => {
                 let mut m = MacAddr { a: [0u8; 6] };
                 for (i, octet) in v.iter().enumerate() {
-                    m.a[i] = u8::from_str_radix(octet, 16)
-                        .map_err(|_| MacError::InvalidOctet)?;
+                    m.a[i] = u8::from_str_radix(octet, 16).map_err(|_| MacError::InvalidOctet)?;
                 }
                 Ok(m)
             }

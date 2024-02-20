@@ -110,9 +110,8 @@ impl Protocol for Ipv6Hdr {
 
         let ipv6_src = L3Endpoint::try_from(src)
             .map_err(|_| crate::construct_error("no L3 source provided"))?;
-        let ipv6_dst = L3Endpoint::try_from(dst).map_err(|_| {
-            crate::construct_error("no L3 destination provided")
-        })?;
+        let ipv6_dst = L3Endpoint::try_from(dst)
+            .map_err(|_| crate::construct_error("no L3 destination provided"))?;
 
         let mut pkt = match proto {
             IPPROTO_ICMPV6 => icmp::IcmpHdr::gen(src, dst, protos, body)?,
@@ -127,9 +126,7 @@ impl Protocol for Ipv6Hdr {
         }?;
         let dst_ip = match ipv6_dst.ip {
             IpAddr::V6(ip) => Ok(ip),
-            _ => {
-                Err(crate::construct_error("ipv4 destination for ipv6 header"))
-            }
+            _ => Err(crate::construct_error("ipv4 destination for ipv6 header")),
         }?;
 
         let mut h = Ipv6Hdr {
