@@ -1,0 +1,30 @@
+[package]
+name = "lldpd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+packet.workspace = true
+pcap.workspace = true
+
+anyhow.workspace = true
+chrono.workspace = true
+common.workspace = true
+crucible-smf.workspace = true
+dpd-client.workspace = true
+dropshot.workspace = true
+http.workspace = true
+signal-hook.workspace = true
+serde.workspace = true
+schemars.workspace = true
+slog.workspace = true
+structopt.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[build-dependencies]
+anyhow.workspace = true
+
+[build-dependencies.vergen]
+version = "8.0"
+features = [ "cargo", "git", "git2", "rustc" ]

@@ -1,0 +1,10 @@
+[package.dendrite]
+service_name = "lldp"
+source.type = "local"
+source.paths = [
+  {from = "target/proto/opt/oxide/bin/lldpd" , to = "/opt/oxide/bin/lldpd"},
+  {from = "target/proto/opt/oxide/bin/lldpadm" , to = "/opt/oxide/bin/lldpadm"},
+  {from = "target/proto/opt/oxide/bin/svc-lldpd" , to = "/opt/oxide/bin/svc-lldpd"},
+  {from = "target/proto/lib/svc/manifest/system/lldpd.xml" , to = "/var/svc/manifest/site/lldpd/manifest.xml"},
+]
+output.type = "zone"

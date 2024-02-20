@@ -1,0 +1,28 @@
+[package]
+name = "dpd-client"
+version = "0.1.0"
+edition = "2021"
+description = "Client library for the Dendrite data plane daemon"
+
+[dependencies]
+async-trait = "0.1.68"
+http.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+slog.workspace = true
+tokio = { workspace = true, features = [ "full" ] }
+
+common.workspace = true
+progenitor.workspace = true
+
+[dev-dependencies]
+packet = { path = "../packet" }
+pcap = { path = "../pcap" }
+anyhow.workspace = true
+rand.workspace = true
+slog.workspace = true
+slog-async.workspace = true
+slog-term.workspace = true
