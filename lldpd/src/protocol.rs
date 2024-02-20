@@ -7,12 +7,10 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
-use packet::lldp::LldpHdr;
-use packet::lldp::LldpTlv;
-
+use crate::packet::LldpTlv;
 use crate::types::LldpdError;
 use crate::types::LldpdResult;
-use common::network::MacAddr;
+use common::MacAddr;
 
 /// Utility function to generate a protocol error
 pub fn protocol_error(message: impl ToString) -> LldpdError {
@@ -27,8 +25,7 @@ pub struct Lldpdu {
     pub port_description: Option<String>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
-    pub system_capabilities:
-        Option<(BTreeSet<SystemCapabilities>, BTreeSet<SystemCapabilities>)>,
+    pub system_capabilities: Option<(BTreeSet<SystemCapabilities>, BTreeSet<SystemCapabilities>)>,
     pub management_addresses: Vec<ManagementAddress>,
     pub organizationally_specific: Vec<OrganizationallySpecific>,
 }
@@ -58,7 +55,7 @@ impl fmt::Display for Lldpdu {
     }
 }
 
-impl TryFrom<&Lldpdu> for packet::lldp::LldpHdr {
+impl TryFrom<&Lldpdu> for Vec<LldpTlv> {
     type Error = LldpdError;
 
     fn try_from(lldpdu: &Lldpdu) -> Result<Self, Self::Error> {
@@ -85,30 +82,30 @@ impl TryFrom<&Lldpdu> for packet::lldp::LldpHdr {
             lldp_data.push(os.try_into()?)
         }
 
-        Ok(LldpHdr { lldp_data })
+        Ok(lldp_data)
     }
 }
 
-impl TryFrom<&LldpHdr> for Lldpdu {
+impl TryFrom<&Vec<LldpTlv>> for Lldpdu {
     type Error = LldpdError;
 
-    fn try_from(hdr: &LldpHdr) -> Result<Self, Self::Error> {
-        let cnt = hdr.lldp_data.len();
+    fn try_from(data: &Vec<LldpTlv>) -> Result<Self, Self::Error> {
+        let cnt = data.len();
 
         let chassis_id: ChassisId = if cnt >= 1 {
-            (&hdr.lldp_data[0]).try_into()
+            (&data[0]).try_into()
         } else {
             Err(protocol_error("LLDP packet has no ChassisId"))
         }?;
 
         let port_id: PortId = if cnt >= 2 {
-            (&hdr.lldp_data[1]).try_into()
+            (&data[1]).try_into()
         } else {
             Err(protocol_error("LLDP packet has no PortId"))
         }?;
 
         let ttl = if cnt >= 3 {
-            ttl_from_tlv(&hdr.lldp_data[2])
+            ttl_from_tlv(&data[2])
         } else {
             Err(protocol_error("LLDP packet has no TTL"))
         }?;
@@ -122,11 +119,9 @@ impl TryFrom<&LldpHdr> for Lldpdu {
 
         // XXX: error out if we get duplicates
         let mut done = false;
-        for tlv in hdr.lldp_data.iter().skip(3) {
+        for tlv in data.iter().skip(3) {
             if done {
-                return Err(protocol_error(
-                    "LLDP packet has TLVs afer EndOfLLDPDU`",
-                ));
+                return Err(protocol_error("LLDP packet has TLVs afer EndOfLLDPDU`"));
             }
 
             let tlv_type: TlvType = tlv.lldp_tlv_type.try_into()?;
@@ -134,31 +129,18 @@ impl TryFrom<&LldpHdr> for Lldpdu {
             match tlv_type {
                 TlvType::EndOfLLDPDU => done = true,
                 TlvType::ChassisId => {
-                    return Err(protocol_error(
-                        "LLDP packet has multiple ChassisId TLVs`",
-                    ))
+                    return Err(protocol_error("LLDP packet has multiple ChassisId TLVs`"))
                 }
                 TlvType::PortId => {
-                    return Err(protocol_error(
-                        "LLDP packet has multiple PortId TLVs`",
-                    ))
+                    return Err(protocol_error("LLDP packet has multiple PortId TLVs`"))
                 }
-                TlvType::Ttl => {
-                    return Err(protocol_error(
-                        "LLDP packet has multiple TTL TLVs`",
-                    ))
-                }
+                TlvType::Ttl => return Err(protocol_error("LLDP packet has multiple TTL TLVs`")),
                 TlvType::PortDescription => {
-                    port_description = Some(string_from_octets(
-                        "PortDescription",
-                        &tlv.lldp_tlv_octets,
-                    )?)
+                    port_description =
+                        Some(string_from_octets("PortDescription", &tlv.lldp_tlv_octets)?)
                 }
                 TlvType::SystemName => {
-                    system_name = Some(string_from_octets(
-                        "SystemName",
-                        &tlv.lldp_tlv_octets,
-                    )?)
+                    system_name = Some(string_from_octets("SystemName", &tlv.lldp_tlv_octets)?)
                 }
                 TlvType::SystemDescription => {
                     system_description = Some(string_from_octets(
@@ -166,9 +148,7 @@ impl TryFrom<&LldpHdr> for Lldpdu {
                         &tlv.lldp_tlv_octets,
                     )?)
                 }
-                TlvType::ManagementAddress => {
-                    management_addresses.push(tlv.try_into()?)
-                }
+                TlvType::ManagementAddress => management_addresses.push(tlv.try_into()?),
                 TlvType::SystemCapabilities => {
                     system_capabilities = Some(capabilities_from_tlv(tlv)?)
                 }
@@ -206,16 +186,7 @@ fn tlv_sanity_check(tlv: &LldpTlv, expected_type: TlvType) -> LldpdResult<()> {
 }
 
 #[derive(
-    Clone,
-    Debug,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Deserialize,
-    JsonSchema,
-    Serialize,
+    Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, JsonSchema, Serialize,
 )]
 pub enum ChassisId {
     ChassisComponent(String), // RFC 6993
@@ -313,9 +284,7 @@ impl TryFrom<&ChassisId> for LldpTlv {
             ChassisId::PortComponent(tlvdata) => {
                 (ChassisIdSubtype::PortComponent, tlvdata.as_bytes().to_vec())
             }
-            ChassisId::MacAddress(mac) => {
-                (ChassisIdSubtype::MacAddress, mac.to_vec())
-            }
+            ChassisId::MacAddress(mac) => (ChassisIdSubtype::MacAddress, mac.to_vec()),
             ChassisId::NetworkAddress(ip) => (
                 ChassisIdSubtype::NetworkAddress,
                 addr_to_octets(*ip).to_vec(),
@@ -360,48 +329,34 @@ impl TryFrom<&LldpTlv> for ChassisId {
             ChassisIdSubtype::Reserved => {
                 Err(protocol_error("found ChassisId with Reserved subtype"))
             }
-            ChassisIdSubtype::ChassisComponent => {
-                Ok(ChassisId::ChassisComponent(string_from_octets(
-                    "ChassisId",
-                    data,
-                )?))
-            }
-            ChassisIdSubtype::InterfaceAlias => Ok(ChassisId::InterfaceAlias(
+            ChassisIdSubtype::ChassisComponent => Ok(ChassisId::ChassisComponent(
                 string_from_octets("ChassisId", data)?,
             )),
-            ChassisIdSubtype::PortComponent => Ok(ChassisId::PortComponent(
-                string_from_octets("ChassisId", data)?,
-            )),
-            ChassisIdSubtype::MacAddress => {
-                Ok(ChassisId::MacAddress(MacAddr::from_slice(data)))
-            }
+            ChassisIdSubtype::InterfaceAlias => Ok(ChassisId::InterfaceAlias(string_from_octets(
+                "ChassisId",
+                data,
+            )?)),
+            ChassisIdSubtype::PortComponent => Ok(ChassisId::PortComponent(string_from_octets(
+                "ChassisId",
+                data,
+            )?)),
+            ChassisIdSubtype::MacAddress => Ok(ChassisId::MacAddress(MacAddr::from_slice(data))),
             ChassisIdSubtype::NetworkAddress => {
                 Ok(ChassisId::NetworkAddress(addr_from_octets(data)?))
             }
-            ChassisIdSubtype::InterfaceName => Ok(ChassisId::InterfaceName(
+            ChassisIdSubtype::InterfaceName => Ok(ChassisId::InterfaceName(string_from_octets(
+                "ChassisId",
+                data,
+            )?)),
+            ChassisIdSubtype::LocallyAssigned => Ok(ChassisId::LocallyAssigned(
                 string_from_octets("ChassisId", data)?,
             )),
-            ChassisIdSubtype::LocallyAssigned => {
-                Ok(ChassisId::LocallyAssigned(string_from_octets(
-                    "ChassisId",
-                    data,
-                )?))
-            }
         }
     }
 }
 
 #[derive(
-    Clone,
-    Debug,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Deserialize,
-    JsonSchema,
-    Serialize,
+    Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, JsonSchema, Serialize,
 )]
 pub enum PortId {
     InterfaceAlias(String), // RFC 2863
@@ -441,9 +396,7 @@ impl TryFrom<&PortId> for LldpTlv {
             PortId::PortComponent(tlvdata) => {
                 (PortIdSubtype::PortComponent, tlvdata.as_bytes().to_vec())
             }
-            PortId::MacAddress(mac) => {
-                (PortIdSubtype::MacAddress, mac.to_vec())
-            }
+            PortId::MacAddress(mac) => (PortIdSubtype::MacAddress, mac.to_vec()),
             PortId::NetworkAddress(ip) => {
                 (PortIdSubtype::NetworkAddress, addr_to_octets(*ip).to_vec())
             }
@@ -487,21 +440,15 @@ impl TryFrom<&LldpTlv> for PortId {
         let subtype = PortIdSubtype::try_from(tlv.lldp_tlv_octets[0])?;
         let data = &tlv.lldp_tlv_octets[1..];
         match subtype {
-            PortIdSubtype::Reserved => {
-                Err(protocol_error("found PortId with Reserved subtype"))
-            }
+            PortIdSubtype::Reserved => Err(protocol_error("found PortId with Reserved subtype")),
             PortIdSubtype::InterfaceAlias => {
                 Ok(PortId::InterfaceAlias(string_from_octets("PortId", data)?))
             }
             PortIdSubtype::PortComponent => {
                 Ok(PortId::PortComponent(string_from_octets("PortId", data)?))
             }
-            PortIdSubtype::MacAddress => {
-                Ok(PortId::MacAddress(MacAddr::from_slice(data)))
-            }
-            PortIdSubtype::NetworkAddress => {
-                Ok(PortId::NetworkAddress(addr_from_octets(data)?))
-            }
+            PortIdSubtype::MacAddress => Ok(PortId::MacAddress(MacAddr::from_slice(data))),
+            PortIdSubtype::NetworkAddress => Ok(PortId::NetworkAddress(addr_from_octets(data)?)),
             PortIdSubtype::InterfaceName => {
                 Ok(PortId::InterfaceName(string_from_octets("PortId", data)?))
             }
@@ -644,11 +591,7 @@ pub struct ManagementAddress {
 impl fmt::Display for ManagementAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.oid {
-            Some(oid) => write!(
-                f,
-                "{} ({}) (OID: {})",
-                self.addr, self.interface_num, oid
-            ),
+            Some(oid) => write!(f, "{} ({}) (OID: {})", self.addr, self.interface_num, oid),
             None => write!(f, "{} ({})", self.addr, self.interface_num),
         }
     }
@@ -664,18 +607,14 @@ impl TryFrom<&ManagementAddress> for LldpTlv {
         };
 
         if oid_len > 128 {
-            return Err(protocol_error(
-                "OID must be no more than 128 bytes long",
-            ));
+            return Err(protocol_error("OID must be no more than 128 bytes long"));
         }
         let mut addr = addr_to_octets(from.addr);
 
         let (iface_num_subtype, iface_num) = match from.interface_num {
             InterfaceNum::Unknown(num) => (InterfaceNumSubtype::Unknown, num),
             InterfaceNum::IfIndex(num) => (InterfaceNumSubtype::IfIndex, num),
-            InterfaceNum::PortNumber(num) => {
-                (InterfaceNumSubtype::PortNumber, num)
-            }
+            InterfaceNum::PortNumber(num) => (InterfaceNumSubtype::PortNumber, num),
         };
         let mut iface_num = iface_num.to_be_bytes().to_vec();
 
@@ -808,9 +747,7 @@ pub fn string_to_tlv(tlv_type: TlvType, data: &String) -> LldpdResult<LldpTlv> {
         | TlvType::PortId
         | TlvType::Ttl
         | TlvType::SystemCapabilities
-        | TlvType::ManagementAddress => {
-            Err(protocol_error("TLV type doesn't contain string data"))
-        }
+        | TlvType::ManagementAddress => Err(protocol_error("TLV type doesn't contain string data")),
         x => Ok(x as u8),
     }?;
 
@@ -868,20 +805,14 @@ impl From<Scope> for MacAddr {
     fn from(s: Scope) -> MacAddr {
         match s {
             Scope::Bridge => MacAddr::new(0x01, 0x80, 0xc2, 0x00, 0x00, 0x0E),
-            Scope::NonTPMRBridge => {
-                MacAddr::new(0x01, 0x80, 0xc2, 0x00, 0x00, 0x03)
-            }
-            Scope::CustomerBridge => {
-                MacAddr::new(0x01, 0x80, 0xc2, 0x00, 0x00, 0x00)
-            }
+            Scope::NonTPMRBridge => MacAddr::new(0x01, 0x80, 0xc2, 0x00, 0x00, 0x03),
+            Scope::CustomerBridge => MacAddr::new(0x01, 0x80, 0xc2, 0x00, 0x00, 0x00),
         }
     }
 }
 
 /// TLV Type values as defined in table 8-1
-#[derive(
-    Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize)]
 #[repr(u8)]
 pub enum TlvType {
     EndOfLLDPDU = 0,
@@ -923,9 +854,7 @@ impl From<TlvType> for u8 {
 }
 
 /// Chassis ID Subtype values as defined in table 8-2.
-#[derive(
-    Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize)]
 #[repr(u8)]
 pub enum ChassisIdSubtype {
     Reserved = 0,
@@ -993,9 +922,7 @@ impl From<ChassisIdSubtype> for u8 {
 }
 
 /// Port ID Subtype values as defined by table 8-3.
-#[derive(
-    Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, JsonSchema, Serialize)]
 #[repr(u8)]
 pub enum PortIdSubtype {
     Reserved = 0,
@@ -1049,17 +976,7 @@ impl From<PortIdSubtype> for u8 {
 /// system's available and enabled capabilities are represented by bitmasks,
 /// with the value below acting as the index into that bitmask.
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Hash,
-    Eq,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Deserialize,
-    JsonSchema,
-    Serialize,
+    Clone, Copy, Debug, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, JsonSchema, Serialize,
 )]
 #[repr(u8)]
 pub enum SystemCapabilities {

@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+default = ["dendrite", "smf"]
 dendrite = []
 smf = []
 
 [dependencies]
-packet.workspace = true
 pcap.workspace = true
 
 anyhow.workspace = true

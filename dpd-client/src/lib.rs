@@ -6,9 +6,7 @@
 
 //! Client library for the Dendrite data plane daemon.
 
-use common::network;
 use slog::Logger;
-use std::fmt;
 
 pub const DEFAULT_PORT: u16 = 12224;
 
@@ -37,33 +35,9 @@ progenitor::generate_api!(
     post_hook = (|state: &crate::ClientState, result: &Result<_, _>| {
         slog::trace!(state.log, "client response"; "result" => ?result);
     }),
-    derives = [ PartialEq ],
+    derives = [PartialEq],
     replace = {
-        Ipv4Cidr = common::network::Ipv4Cidr,
-        Ipv6Cidr = common::network::Ipv6Cidr,
-        Cidr = common::network::Cidr,
-        PortId = common::ports::PortId,
+        PortId = common::ports::PortId ,
+        MacAddr = common::MacAddr
     }
 );
-
-impl fmt::Display for types::MacAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            self.a[0], self.a[1], self.a[2], self.a[3], self.a[4], self.a[5],
-        )
-    }
-}
-
-impl From<types::MacAddr> for network::MacAddr {
-    fn from(m: types::MacAddr) -> network::MacAddr {
-        network::MacAddr::from_slice(&m.a)
-    }
-}
-
-impl From<network::MacAddr> for types::MacAddr {
-    fn from(m: network::MacAddr) -> types::MacAddr {
-        types::MacAddr { a: m.into() }
-    }
-}

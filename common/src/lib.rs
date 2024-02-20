@@ -1,24 +1,18 @@
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
+use std::fmt;
 use std::iter::FromIterator;
-use std::sync::Once;
-use std::time::Duration;
-use std::time::Instant;
+use std::str::FromStr;
 
-pub mod counters;
-pub mod logging;
-pub mod nat;
-pub mod network;
-pub mod oximeter;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde::Serialize;
+use slog::o;
+use slog::Drain;
+use thiserror::Error;
+
 pub mod ports;
 
-/// The default port on which the Dendrite API server listens.
-pub const DEFAULT_DPD_PORT: u16 = 12224;
-/// The default port on which the LLDP API server listens.
 pub const DEFAULT_LLDPD_PORT: u16 = 12230;
-
-/// The http error code used when a rollback failure occurs.
-pub const ROLLBACK_FAILURE_ERROR_CODE: &str = "rollback failure";
 
 /// Given two arrays, return two vectors containing only the unique items from each array.
 pub fn purge_common<T>(a: &[T], b: &[T]) -> (Vec<T>, Vec<T>)
@@ -35,79 +29,225 @@ where
     )
 }
 
-#[test]
-fn test_purge() {
-    use std::net::Ipv4Addr;
-
-    let a = vec!["a", "b", "c", "d"];
-    let b = vec!["c", "d", "e", "f"];
-    let (mut unique_a, mut unique_b) = purge_common(&a, &b);
-    unique_a.sort();
-    unique_b.sort();
-    assert_eq!(unique_a, vec!["a", "b"]);
-    assert_eq!(unique_b, vec!["e", "f"]);
-
-    let a = vec![10, 9, 8, 7, 11, 12, 13];
-    let b = vec![12, 9, 7, 4, 6];
-    let (mut unique_a, mut unique_b) = purge_common(&a, &b);
-    unique_a.sort();
-    unique_b.sort();
-    assert_eq!(unique_a, vec![8, 10, 11, 13]);
-    assert_eq!(unique_b, vec![4, 6]);
-
-    let a = vec!["one", "two", "three", "two", "four", "four"];
-    let b = vec!["two", "two", "two", "five"];
-    let (mut unique_a, mut unique_b) = purge_common(&a, &b);
-    unique_a.sort();
-    unique_b.sort();
-    assert_eq!(unique_a, vec!["four", "four", "one", "three"]);
-    assert_eq!(unique_b, vec!["five"]);
-
-    let a = vec![
-        Ipv4Addr::new(192, 168, 1, 1),
-        Ipv4Addr::new(192, 168, 1, 2),
-        Ipv4Addr::new(192, 168, 1, 3),
-        Ipv4Addr::new(192, 168, 1, 4),
-    ];
-
-    let b = vec![
-        Ipv4Addr::new(192, 168, 1, 1),
-        Ipv4Addr::new(192, 168, 1, 2),
-        Ipv4Addr::new(192, 168, 1, 3),
-    ];
-    let (mut unique_a, mut unique_b) = purge_common(&a, &b);
-    unique_a.sort();
-    unique_b.sort();
-    assert_eq!(unique_a, vec![Ipv4Addr::new(192, 168, 1, 4)]);
-    assert_eq!(unique_b, Vec::<Ipv4Addr>::new());
+/// An EUI-48 MAC address, used for layer-2 addressing.
+#[derive(Clone, Copy, Deserialize, JsonSchema, Serialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct MacAddr {
+    a: [u8; 6],
 }
 
-/// Return a random interval within a range
-pub fn random_interval(min: Duration, max: Duration) -> Duration {
-    assert!(min <= max);
-
-    use rand::distributions::Distribution;
-    let dist = rand::distributions::Uniform::new(min, max);
-    dist.sample(&mut rand::thread_rng())
-}
-
-static mut START_OF_DAY: Option<Instant> = None;
-static INIT: Once = Once::new();
-
-fn timestamp() -> Duration {
-    unsafe {
-        INIT.call_once(|| {
-            START_OF_DAY = Some(Instant::now());
-        });
-        Instant::now().duration_since(START_OF_DAY.unwrap())
+impl From<[u8; 6]> for MacAddr {
+    fn from(a: [u8; 6]) -> Self {
+        Self { a }
     }
 }
-/// Return a timestamp in nanoseconds
-pub fn timestamp_ns() -> i64 {
-    i64::try_from(timestamp().as_nanos()).unwrap()
+
+impl MacAddr {
+    pub const ZERO: Self = MacAddr {
+        a: [0, 0, 0, 0, 0, 0],
+    };
+
+    /// Create a new MAC address from octets in network byte order.
+    pub fn new(o0: u8, o1: u8, o2: u8, o3: u8, o4: u8, o5: u8) -> MacAddr {
+        MacAddr {
+            a: [o0, o1, o2, o3, o4, o5],
+        }
+    }
+
+    /// Create a new MAC address from a slice of bytes in network byte order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slice is fewer than 6 octets.
+    ///
+    /// Note that any further octets are ignored.
+    pub fn from_slice(s: &[u8]) -> MacAddr {
+        MacAddr::new(s[0], s[1], s[2], s[3], s[4], s[5])
+    }
+
+    /// Convert `self` to an array of bytes in network byte order.
+    pub fn to_vec(self) -> Vec<u8> {
+        vec![
+            self.a[0], self.a[1], self.a[2], self.a[3], self.a[4], self.a[5],
+        ]
+    }
+
+    /// Return `true` if `self` is the null MAC address, all zeros.
+    pub fn is_null(self) -> bool {
+        const EMPTY: MacAddr = MacAddr {
+            a: [0, 0, 0, 0, 0, 0],
+        };
+
+        self == EMPTY
+    }
+
+    /// Generate an EUI-64 ID from the mac address, following the process
+    /// desribed in RFC 2464, section 4.
+    pub fn to_eui64(self) -> [u8; 8] {
+        [
+            self.a[0] ^ 0x2,
+            self.a[1],
+            self.a[2],
+            0xff,
+            0xfe,
+            self.a[3],
+            self.a[4],
+            self.a[5],
+        ]
+    }
 }
 
-/// Return a timestamp in milliseconds
-pub fn timestamp_ms() -> i64 {
-    i64::try_from(timestamp().as_millis()).unwrap()
+#[derive(Error, Debug, Clone)]
+pub enum MacError {
+    /// Too few octets to be a valid MAC address
+    #[error("Too few octets")]
+    TooShort,
+    /// Too many octets to be a valid MAC address
+    #[error("Too many octets")]
+    TooLong,
+    /// Found an octet with a non-hexadecimal character or invalid separator
+    #[error("Invalid octect")]
+    InvalidOctet,
+}
+
+impl FromStr for MacAddr {
+    type Err = MacError;
+
+    fn from_str(s: &str) -> Result<Self, MacError> {
+        let v: Vec<&str> = s.split(':').collect();
+
+        match v.len().cmp(&6) {
+            std::cmp::Ordering::Less => Err(MacError::TooShort),
+            std::cmp::Ordering::Greater => Err(MacError::TooLong),
+            std::cmp::Ordering::Equal => {
+                let mut m = MacAddr { a: [0u8; 6] };
+                for (i, octet) in v.iter().enumerate() {
+                    m.a[i] = u8::from_str_radix(octet, 16).map_err(|_| MacError::InvalidOctet)?;
+                }
+                Ok(m)
+            }
+        }
+    }
+}
+
+impl fmt::Display for MacAddr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.a[0], self.a[1], self.a[2], self.a[3], self.a[4], self.a[5]
+        )
+    }
+}
+
+impl fmt::Debug for MacAddr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.a[0], self.a[1], self.a[2], self.a[3], self.a[4], self.a[5]
+        )
+    }
+}
+
+impl From<MacAddr> for [u8; 6] {
+    fn from(mac: MacAddr) -> [u8; 6] {
+        mac.a
+    }
+}
+
+impl From<MacAddr> for u64 {
+    fn from(mac: MacAddr) -> u64 {
+        ((mac.a[0] as u64) << 40)
+            | ((mac.a[1] as u64) << 32)
+            | ((mac.a[2] as u64) << 24)
+            | ((mac.a[3] as u64) << 16)
+            | ((mac.a[4] as u64) << 8)
+            | (mac.a[5] as u64)
+    }
+}
+
+impl From<&MacAddr> for u64 {
+    fn from(mac: &MacAddr) -> u64 {
+        From::from(*mac)
+    }
+}
+
+impl From<u64> for MacAddr {
+    fn from(x: u64) -> Self {
+        MacAddr {
+            a: [
+                ((x >> 40) & 0xff) as u8,
+                ((x >> 32) & 0xff) as u8,
+                ((x >> 24) & 0xff) as u8,
+                ((x >> 16) & 0xff) as u8,
+                ((x >> 8) & 0xff) as u8,
+                (x & 0xff) as u8,
+            ],
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum LogFormat {
+    Human,
+    Json,
+}
+
+impl FromStr for LogFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "h" | "human" => Ok(LogFormat::Human),
+            "j" | "json" => Ok(LogFormat::Json),
+            _ => Err("invalid log format".to_string()),
+        }
+    }
+}
+
+pub fn log_init(
+    name: &'static str,
+    log_file: &Option<String>,
+    log_format: LogFormat,
+) -> anyhow::Result<slog::Logger> {
+    let drain = match log_file {
+        Some(log_file) => {
+            let log_file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(log_file)?;
+            match log_format {
+                LogFormat::Json => {
+                    let drain = slog_bunyan::with_name(name, log_file).build().fuse();
+                    slog_async::Async::new(drain).build().fuse()
+                }
+                LogFormat::Human => {
+                    let decorator = slog_term::PlainDecorator::new(log_file);
+                    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+                    slog_async::Async::new(drain).build().fuse()
+                }
+            }
+        }
+        None => match log_format {
+            LogFormat::Json => {
+                let drain = slog_bunyan::with_name(name, std::io::stdout())
+                    .build()
+                    .fuse();
+                slog_async::Async::new(drain)
+                    .chan_size(32768)
+                    .build()
+                    .fuse()
+            }
+            LogFormat::Human => {
+                let decorator = slog_term::TermDecorator::new().build();
+                let drain = slog_term::FullFormat::new(decorator).build().fuse();
+                slog_async::Async::new(drain)
+                    .chan_size(32768)
+                    .build()
+                    .fuse()
+            }
+        },
+    };
+    Ok(slog::Logger::root(drain, o!()))
 }

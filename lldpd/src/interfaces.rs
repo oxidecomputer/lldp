@@ -15,13 +15,13 @@ use slog::warn;
 use tokio::process::Command;
 use tokio::sync::oneshot;
 
-use packet::Packet;
-
+use crate::packet::LldpTlv;
+use crate::packet::Packet;
 use crate::protocol;
 use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use crate::Global;
-use common::network::MacAddr;
+use common::MacAddr;
 use protocol::Lldpdu;
 
 const DLADM: &str = "/usr/sbin/dladm";
@@ -191,29 +191,18 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
     };
 
     let lldpdu = build_lldpdu(&switchinfo, name, iface);
+    let tlvs: Vec<LldpTlv> = (&lldpdu).try_into()?;
 
     let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
-    let tgt = packet::L2Endpoint::new(tgt_mac);
-    let src = packet::L2Endpoint::new(iface.mac);
-    let mut packet = Packet::gen(src.into(), tgt.into(), vec![packet::eth::ETHER_LLDP], None)
-        .map_err(|e| LldpdError::Other(format!("while building LLDP packet: {e:?}")))?;
-
-    packet.hdrs.lldp_hdr = Some(
-        (&lldpdu)
-            .try_into()
-            .map_err(|e| LldpdError::Invalid(format!("{e:?}")))?,
-    );
+    let mut packet = Packet::new(tgt_mac, iface.mac);
+    tlvs.iter().for_each(|tlv| packet.add_tlv(tlv));
 
     Ok(Some(packet))
 }
 
 async fn xmit_lldpdu(pcap: &pcap::Pcap, packet: Packet) -> LldpdResult<i32> {
-    match packet.deparse() {
-        Ok(data) => pcap
-            .send(&data)
-            .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into()),
-        Err(e) => Err(anyhow!("unable to deparse {:?}: {:?}", packet, e).into()),
-    }
+    pcap.send(&packet.deparse())
+        .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
 }
 
 fn try_add(g: &Global, name: &str, interface: Option<Interface>) -> LldpdResult<()> {
@@ -239,15 +228,9 @@ fn interface_remove(g: &Global, name: &str) {
 }
 
 fn handle_packet(g: &Global, name: &str, data: &[u8]) {
-    // Before fully parsing the packet, check the ethertype at bytes 12
-    // and 13 to see if it could be an LLDP packet.
-
-    if data.len() < 14 || data[12] != 0x88 || data[13] != 0xcc {
-        return;
-    }
-
-    let packet = match packet::Packet::parse(data) {
-        Ok(packet) => packet,
+    let packet = match Packet::parse(data) {
+        Ok(Some(packet)) => packet,
+        Ok(None) => return,
         Err(e) => {
             debug!(g.log, "failed to parse packet: {:?}", e;
 		    "port" => name);
@@ -255,18 +238,17 @@ fn handle_packet(g: &Global, name: &str, data: &[u8]) {
         }
     };
 
-    match packet.hdrs.lldp_hdr {
-        Some(lldp) => match Lldpdu::try_from(&lldp) {
+    if packet.lldp_hdr.lldp_data.is_empty() {
+        debug!(g.log, "found packet with LLDP ethertype but no header";
+		    "port" => name);
+    } else {
+        match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
             Ok(lldpdu) => {
                 trace!(g.log, "handling incoming LLDPDU"; "port" => name);
                 crate::neighbors::incoming_lldpdu(g, name, lldpdu)
             }
             Err(e) => error!(g.log, "parsing LLDP packet failed: {e:?}";
 		 "port" => name),
-        },
-        None => {
-            debug!(g.log, "found packet with LLDP ethertype but no header";
-		    "port" => name);
         }
     }
 }

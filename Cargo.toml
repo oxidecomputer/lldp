@@ -6,7 +6,6 @@ members = [
 	"dpd-client",
 	"lldpd-client",
 	"lldpd",
-	"packet",
 	"pcap",
 	"xtask",
 ]
@@ -19,7 +18,6 @@ resolver = "2"
 dpd-client = { path = "dpd-client" }
 lldpd-client = { path = "lldpd-client" }
 common = { path = "common" }
-packet = { path = "packet" }
 pcap = { path = "pcap" }
 
 # oxide dependencies from github
