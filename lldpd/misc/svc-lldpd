@@ -2,7 +2,7 @@
 
 . /lib/svc/share/smf_include.sh
 
-ROOT=/opt/oxide/dendrite
+ROOT=/opt/oxide
 
 if /usr/bin/pgrep -x -u 0 lldpd >/dev/null 2>&1; then
 	echo "$0: lldpd is already running"
