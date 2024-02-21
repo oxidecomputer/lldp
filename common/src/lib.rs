@@ -30,7 +30,18 @@ where
 }
 
 /// An EUI-48 MAC address, used for layer-2 addressing.
-#[derive(Clone, Copy, Deserialize, JsonSchema, Serialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Deserialize,
+    JsonSchema,
+    Serialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
 pub struct MacAddr {
     a: [u8; 6],
 }
@@ -121,7 +132,8 @@ impl FromStr for MacAddr {
             std::cmp::Ordering::Equal => {
                 let mut m = MacAddr { a: [0u8; 6] };
                 for (i, octet) in v.iter().enumerate() {
-                    m.a[i] = u8::from_str_radix(octet, 16).map_err(|_| MacError::InvalidOctet)?;
+                    m.a[i] = u8::from_str_radix(octet, 16)
+                        .map_err(|_| MacError::InvalidOctet)?;
                 }
                 Ok(m)
             }
@@ -219,12 +231,14 @@ pub fn log_init(
                 .open(log_file)?;
             match log_format {
                 LogFormat::Json => {
-                    let drain = slog_bunyan::with_name(name, log_file).build().fuse();
+                    let drain =
+                        slog_bunyan::with_name(name, log_file).build().fuse();
                     slog_async::Async::new(drain).build().fuse()
                 }
                 LogFormat::Human => {
                     let decorator = slog_term::PlainDecorator::new(log_file);
-                    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+                    let drain =
+                        slog_term::FullFormat::new(decorator).build().fuse();
                     slog_async::Async::new(drain).build().fuse()
                 }
             }
@@ -241,7 +255,8 @@ pub fn log_init(
             }
             LogFormat::Human => {
                 let decorator = slog_term::TermDecorator::new().build();
-                let drain = slog_term::FullFormat::new(decorator).build().fuse();
+                let drain =
+                    slog_term::FullFormat::new(decorator).build().fuse();
                 slog_async::Async::new(drain)
                     .chan_size(32768)
                     .build()

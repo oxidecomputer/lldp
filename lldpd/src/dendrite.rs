@@ -28,7 +28,10 @@ fn parse_link_name(name: &str) -> LldpdResult<(PortId, LinkId)> {
 }
 
 #[cfg(feature = "dendrite")]
-pub async fn dpd_tfport(g: &Global, name: &str) -> LldpdResult<(String, MacAddr)> {
+pub async fn dpd_tfport(
+    g: &Global,
+    name: &str,
+) -> LldpdResult<(String, MacAddr)> {
     let (port_id, link_id) = parse_link_name(name)?;
     let client = g.dpd.as_ref().ok_or(LldpdError::NoDpd)?;
     let link_info = client
@@ -59,7 +62,10 @@ async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
     }
 }
 
-pub async fn dpd_init(log: &slog::Logger, opts: crate::Opt) -> Option<dpd_client::Client> {
+pub async fn dpd_init(
+    log: &slog::Logger,
+    opts: crate::Opt,
+) -> Option<dpd_client::Client> {
     if opts.no_dpd {
         None
     } else {
@@ -70,7 +76,8 @@ pub async fn dpd_init(log: &slog::Logger, opts: crate::Opt) -> Option<dpd_client
             tag: String::from("lldpd"),
             log: log.new(slog::o!("unit" => "lldpd-client")),
         };
-        let client = Client::new(&format!("http://{host}:{port}"), client_state);
+        let client =
+            Client::new(&format!("http://{host}:{port}"), client_state);
 
         info!(
             log,

@@ -116,7 +116,8 @@ impl Pcap {
             if !self.activated {
                 break;
             }
-            let x = unsafe { ffi::pcap_next_ex(self.lib_hdl, &mut hdr, &mut data) };
+            let x =
+                unsafe { ffi::pcap_next_ex(self.lib_hdl, &mut hdr, &mut data) };
             if x == -2 {
                 // -2 means a clean shutdown
                 break;
@@ -174,7 +175,9 @@ impl Pcap {
             if self.raw_fd >= 0 {
                 let rval = unsafe { ffi::block_on(self.raw_fd, 100, 50000) };
                 if rval < 0 {
-                    return Ternary::Err(format!("unix error during poll: {rval}"));
+                    return Ternary::Err(format!(
+                        "unix error during poll: {rval}"
+                    ));
                 }
                 let _lock = self.lock.lock();
                 if !self.activated {
@@ -242,7 +245,11 @@ impl Pcap {
     }
 
     // Compile a BPF filter/program from text to BPF code
-    pub fn compile(&self, program: &str, netmask: u32) -> Result<ffi::bpf_program, String> {
+    pub fn compile(
+        &self,
+        program: &str,
+        netmask: u32,
+    ) -> Result<ffi::bpf_program, String> {
         let mut bpf = ffi::bpf_program {
             bf_len: 0,
             bf_insns: std::ptr::null_mut(),
@@ -293,7 +300,8 @@ pub fn open_offline(name: &str) -> Result<Pcap, String> {
     let mut errbuf = [0i8; PCAP_ERRBUF_SIZE];
 
     unsafe {
-        let cap = ffi::pcap_open_offline(filename.as_ptr(), errbuf.as_mut_ptr());
+        let cap =
+            ffi::pcap_open_offline(filename.as_ptr(), errbuf.as_mut_ptr());
         if cap.is_null() {
             let msg = CStr::from_ptr(&errbuf as *const i8);
             return Err(msg.to_string_lossy().into_owned());

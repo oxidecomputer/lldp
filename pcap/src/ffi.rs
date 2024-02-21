@@ -23,7 +23,8 @@ pub struct timeval {
 }
 #[test]
 fn bindgen_test_layout_timeval() {
-    const UNINIT: ::core::mem::MaybeUninit<timeval> = ::core::mem::MaybeUninit::uninit();
+    const UNINIT: ::core::mem::MaybeUninit<timeval> =
+        ::core::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::core::mem::size_of::<timeval>(),
@@ -46,7 +47,9 @@ fn bindgen_test_layout_timeval() {
         )
     );
     assert_eq!(
-        unsafe { ::core::ptr::addr_of!((*ptr).tv_usec) as usize - ptr as usize },
+        unsafe {
+            ::core::ptr::addr_of!((*ptr).tv_usec) as usize - ptr as usize
+        },
         8usize,
         concat!(
             "Offset of field: ",
@@ -65,7 +68,8 @@ pub struct bpf_program {
 }
 #[test]
 fn bindgen_test_layout_bpf_program() {
-    const UNINIT: ::core::mem::MaybeUninit<bpf_program> = ::core::mem::MaybeUninit::uninit();
+    const UNINIT: ::core::mem::MaybeUninit<bpf_program> =
+        ::core::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::core::mem::size_of::<bpf_program>(),
@@ -88,7 +92,9 @@ fn bindgen_test_layout_bpf_program() {
         )
     );
     assert_eq!(
-        unsafe { ::core::ptr::addr_of!((*ptr).bf_insns) as usize - ptr as usize },
+        unsafe {
+            ::core::ptr::addr_of!((*ptr).bf_insns) as usize - ptr as usize
+        },
         8usize,
         concat!(
             "Offset of field: ",
@@ -108,7 +114,8 @@ pub struct bpf_insn {
 }
 #[test]
 fn bindgen_test_layout_bpf_insn() {
-    const UNINIT: ::core::mem::MaybeUninit<bpf_insn> = ::core::mem::MaybeUninit::uninit();
+    const UNINIT: ::core::mem::MaybeUninit<bpf_insn> =
+        ::core::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::core::mem::size_of::<bpf_insn>(),
@@ -176,7 +183,8 @@ pub struct pcap_pkthdr {
 }
 #[test]
 fn bindgen_test_layout_pcap_pkthdr() {
-    const UNINIT: ::core::mem::MaybeUninit<pcap_pkthdr> = ::core::mem::MaybeUninit::uninit();
+    const UNINIT: ::core::mem::MaybeUninit<pcap_pkthdr> =
+        ::core::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::core::mem::size_of::<pcap_pkthdr>(),
@@ -226,7 +234,10 @@ extern "C" {
     ) -> *mut pcap_t;
 }
 extern "C" {
-    pub fn pcap_set_timeout(arg1: *mut pcap_t, arg2: ::core::ffi::c_int) -> ::core::ffi::c_int;
+    pub fn pcap_set_timeout(
+        arg1: *mut pcap_t,
+        arg2: ::core::ffi::c_int,
+    ) -> ::core::ffi::c_int;
 }
 extern "C" {
     pub fn pcap_activate(arg1: *mut pcap_t) -> ::core::ffi::c_int;
@@ -251,7 +262,10 @@ extern "C" {
     pub fn pcap_breakloop(arg1: *mut pcap_t);
 }
 extern "C" {
-    pub fn pcap_setfilter(arg1: *mut pcap_t, arg2: *mut bpf_program) -> ::core::ffi::c_int;
+    pub fn pcap_setfilter(
+        arg1: *mut pcap_t,
+        arg2: *mut bpf_program,
+    ) -> ::core::ffi::c_int;
 }
 extern "C" {
     pub fn pcap_setnonblock(

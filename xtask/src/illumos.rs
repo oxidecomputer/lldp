@@ -39,7 +39,9 @@ fn illumos_package() -> Result<()> {
     }
     let mut f = fs::File::create(&manifest)?;
     f.write_all(format!("set name=pkg.fmri value={fmri}\n").as_bytes())?;
-    f.write_all(b"set name=pkg.description value=\"Oxide LLDP daemon and CLI\"\n")?;
+    f.write_all(
+        b"set name=pkg.description value=\"Oxide LLDP daemon and CLI\"\n",
+    )?;
 
     // Manually tweak the auto-generated manifest as we write it to the file
     let b = std::io::BufReader::new(output.stdout.as_slice());
@@ -96,8 +98,8 @@ fn illumos_package() -> Result<()> {
 async fn omicron_package() -> Result<()> {
     let manifest_file = "lldp-manifest.toml";
     let manifest_path = format!("{}/tools/{}", project_root()?, manifest_file);
-    let mut file =
-        fs::File::open(manifest_path).with_context(|| "attempting to open omicron manifest")?;
+    let mut file = fs::File::open(manifest_path)
+        .with_context(|| "attempting to open omicron manifest")?;
     let mut manifest = String::new();
     file.read_to_string(&mut manifest)
         .with_context(|| "reading manifest")?;

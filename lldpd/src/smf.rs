@@ -8,22 +8,30 @@ use crate::types::LldpdResult;
 
 // Given a property name within a group, return all the associated values as
 // a vec of strings.
-fn get_properties(config: &PropertyGroup, name: &str) -> LldpdResult<Vec<String>> {
-    let prop = config
-        .get_property(name)
-        .map_err(|e| LldpdError::Smf(format!("failed to get '{name}' property: {e:?}")))?;
+fn get_properties(
+    config: &PropertyGroup,
+    name: &str,
+) -> LldpdResult<Vec<String>> {
+    let prop = config.get_property(name).map_err(|e| {
+        LldpdError::Smf(format!("failed to get '{name}' property: {e:?}"))
+    })?;
 
     let mut rval = Vec::new();
     if let Some(values) = prop {
-        for value in values
-            .values()
-            .map_err(|e| LldpdError::Smf(format!("failed to get values for '{name}': {e:?}")))?
-        {
+        for value in values.values().map_err(|e| {
+            LldpdError::Smf(format!("failed to get values for '{name}': {e:?}"))
+        })? {
             let value = value
-                .map_err(|e| LldpdError::Smf(format!("failed to get value for '{name}': {e:?}")))?
+                .map_err(|e| {
+                    LldpdError::Smf(format!(
+                        "failed to get value for '{name}': {e:?}"
+                    ))
+                })?
                 .as_string()
                 .map_err(|e| {
-                    LldpdError::Smf(format!("failed to convert value '{name}' to string: {e:?}"))
+                    LldpdError::Smf(format!(
+                        "failed to convert value '{name}' to string: {e:?}"
+                    ))
                 })?;
             if value != "unknown" {
                 rval.push(value);
@@ -66,7 +74,10 @@ pub fn refresh_smf_config(g: &crate::Global) -> LldpdResult<()> {
                 Ok(a) => listen_addresses.push(a),
                 Err(e) => error!(
                     g.log,
-                    "bad socket address {} in smf config/{}: {:?}", addr, SMF_ADDRESS_PROP, e
+                    "bad socket address {} in smf config/{}: {:?}",
+                    addr,
+                    SMF_ADDRESS_PROP,
+                    e
                 ),
             }
         }

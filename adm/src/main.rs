@@ -27,61 +27,69 @@ struct GlobalOpts {
 }
 
 #[derive(Debug, StructOpt)]
-enum SetProp {
-    #[structopt(visible_alias = "c")]
+enum IfaceSetProp {
+    #[structopt(visible_alias = "cid")]
     ChassisId {
-        _iface: String,
-        _chassis_id: String,
+        iface: String,
+        chassis_id: String,
     },
+    #[structopt(visible_alias = "pid")]
     PortId {
-        _iface: String,
-        _id: String,
+        iface: String,
+        id: String,
     },
     Ttl {
-        _iface: String,
-        _ttl: u16,
+        iface: String,
+        ttl: u16,
     },
-    PortDescrption {
-        _iface: String,
-        _desc: String,
+    #[structopt(visible_alias = "portdesc")]
+    PortDescription {
+        iface: String,
+        desc: String,
     },
+    #[structopt(visible_alias = "sysname")]
     SystemName {
-        _iface: String,
-        _name: String,
+        iface: String,
+        name: String,
     },
-    SystemDescrption {
-        _iface: String,
-        _desc: String,
+    #[structopt(visible_alias = "sysdesc")]
+    SystemDescription {
+        iface: String,
+        desc: String,
     },
 }
 
 #[derive(Debug, StructOpt)]
-enum DelProp {
-    #[structopt(visible_alias = "c")]
+enum IfaceDelProp {
+    #[structopt(visible_alias = "cid")]
     ChassisId {
-        _iface: String,
+        iface: String,
     },
+    #[structopt(visible_alias = "pid")]
     PortId {
-        _iface: String,
+        iface: String,
     },
     Ttl {
-        _iface: String,
+        iface: String,
     },
-    PortDescrption {
-        _iface: String,
+    #[structopt(visible_alias = "portdesc")]
+    PortDescription {
+        iface: String,
     },
+    #[structopt(visible_alias = "sysname")]
     SystemName {
-        _iface: String,
+        iface: String,
     },
-    SystemDescrption {
-        _iface: String,
+    #[structopt(visible_alias = "sysdesc")]
+    SystemDescription {
+        iface: String,
     },
 }
 
 #[derive(Debug, StructOpt)]
-enum Prop {
-    Set(SetProp),
-    Del(DelProp),
+enum IfaceProp {
+    Set(IfaceSetProp),
+    Del(IfaceDelProp),
 }
 
 #[derive(Debug, StructOpt)]
@@ -99,13 +107,13 @@ enum Capability {
 }
 
 #[derive(Debug, StructOpt)]
-enum Address {
+enum IfaceAddress {
     /// Add a single address to the list of advertised management addresses
-    Add { _addr: IpAddr },
+    Add { iface: String, addr: IpAddr },
     /// Remove a single address from the list of advertised management addresses
-    Del { _addr: IpAddr },
+    Del { iface: String, addr: IpAddr },
     /// Remove all management addresses
-    Clear,
+    Clear { iface: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -130,13 +138,13 @@ enum Interface {
     #[structopt(visible_alias = "rm", visible_alias = "del")]
     Remove { iface: String },
     /// Manage a property on the interface
-    Prop(Prop),
+    Prop(IfaceProp),
     /// Manage the advertised capabilities for the interface
     #[structopt(visible_alias = "cap", visible_alias = "capab")]
     Capability(Capability),
     /// Manage the management addresses for the interface
     #[structopt(visible_alias = "addr")]
-    Address(Address),
+    Address(IfaceAddress),
     /// Get a single configured interface
     #[structopt(visible_alias = "ls")]
     Get { iface: String },
@@ -146,11 +154,70 @@ enum Interface {
 }
 
 #[derive(Debug, StructOpt)]
+/// Set a property for the whole system, which may be overridden by
+/// per-interface settings.
+enum SystemSetProp {
+    /// Change the ChassisId advertised on all interfaces
+    #[structopt(visible_alias = "cid")]
+    ChassisId { chassis_id: String },
+    /// Change the TTL advertised on all interfaces
+    Ttl { ttl: u16 },
+    /// Change the system name advertised on all interfaces
+    #[structopt(visible_alias = "name")]
+    Name { name: String },
+    /// Change the system description advertised on all interfaces
+    #[structopt(visible_alias = "desc")]
+    Description { desc: String },
+}
+
+#[derive(Debug, StructOpt)]
+/// Clear system level properties.  Some properties are required, and can only
+/// by changed - not removed.
+enum SystemDelProp {
+    #[structopt(visible_alias = "name")]
+    Name,
+    #[structopt(visible_alias = "desc")]
+    Description,
+}
+
+#[derive(Debug, StructOpt)]
+enum SystemProp {
+    Set(SystemSetProp),
+    Del(SystemDelProp),
+}
+
+#[derive(Debug, StructOpt)]
+enum SystemAddress {
+    /// Add a single address to the list of advertised management addresses
+    Add { addr: IpAddr },
+    /// Remove a single address from the list of advertised management addresses
+    Del { addr: IpAddr },
+    /// Remove all management addresses
+    Clear,
+}
+
+#[derive(Debug, StructOpt)]
+enum System {
+    /// Manage a property on the system
+    Prop(SystemProp),
+    /// Manage the advertised capabilities for the system
+    #[structopt(visible_alias = "cap")]
+    Capability(Capability),
+    /// Manage the management addresses for the system
+    #[structopt(visible_alias = "addr")]
+    Address(SystemAddress),
+}
+
+#[derive(Debug, StructOpt)]
 enum Commands {
     /// Print detailed build information about the `lldpd` server.
-    #[structopt(visible_alias = "buildinfo")]
+    #[structopt(visible_alias = "build")]
     BuildInfo,
-    /// Manage the interfaces on which we are listenting and transmitting
+    /// Manage system-level settings, most of which can be overridden at the
+    /// interface level with per-interface settings.
+    #[structopt(visible_alias = "sys")]
+    System(System),
+    /// Manage the interfaces on which we are listening and transmitting
     #[structopt(visible_alias = "iface")]
     Interface(Interface),
     /// Get the neighbors the daemon has seen
@@ -207,6 +274,55 @@ fn display_sysinfo(s: &types::SystemInfo) {
     }
 }
 
+async fn system_prop(client: &Client, prop: SystemProp) -> anyhow::Result<()> {
+    match prop {
+        SystemProp::Set(set) => match set {
+            SystemSetProp::ChassisId { chassis_id } => {
+                // TODO-completeness: allow for different kinds of chassis IDs
+                let id = types::ChassisId::ChassisComponent(chassis_id);
+                client.sys_set_chassis_id(&id).await
+            }
+            SystemSetProp::Ttl { ttl } => client.sys_set_ttl(ttl).await,
+            SystemSetProp::Name { name } => {
+                client.sys_set_system_name(&name).await
+            }
+            SystemSetProp::Description { desc } => {
+                client.sys_set_system_description(&desc).await
+            }
+        },
+        SystemProp::Del(del) => match del {
+            SystemDelProp::Name => client.sys_del_system_name().await,
+            SystemDelProp::Description => {
+                client.sys_del_system_description().await
+            }
+        },
+    }
+    .map(|r| r.into_inner())
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+async fn system_addr(
+    client: &Client,
+    addr: SystemAddress,
+) -> anyhow::Result<()> {
+    match addr {
+        SystemAddress::Add { addr } => {
+            client.sys_add_management_addr(&addr).await
+        }
+        SystemAddress::Del { addr } => {
+            client.sys_del_management_addr(&addr).await
+        }
+        SystemAddress::Clear => client.sys_clear_management_addr().await,
+    }
+    .map(|r| r.into_inner())
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+fn system_capability(cap: Capability) -> anyhow::Result<()> {
+    println!("{cap:?}");
+    Ok(())
+}
+
 fn age(now: DateTime<Utc>, then: DateTime<Utc>) -> String {
     let mut secs = (now - then).to_std().unwrap().as_secs();
     let mut mins = secs / 60;
@@ -246,12 +362,58 @@ fn display_interface(i: &types::Interface) {
     display_sysinfo(&i.system_info);
 }
 
-fn interface_prop(prop: Prop) -> anyhow::Result<()> {
+async fn interface_prop(
+    client: &Client,
+    prop: IfaceProp,
+) -> anyhow::Result<()> {
     match prop {
-        Prop::Set(set) => println!("{set:?}"),
-        Prop::Del(del) => println!("{del:?}"),
-    };
-    Ok(())
+        IfaceProp::Set(set) => match set {
+            IfaceSetProp::ChassisId { iface, chassis_id } => {
+                // TODO-completeness: allow for different kinds of chassis IDs
+                let id = types::ChassisId::ChassisComponent(chassis_id);
+                client.interface_set_chassis_id(&iface, &id).await
+            }
+            IfaceSetProp::PortId { iface, id } => {
+                // TODO-completeness: allow for different kinds of port IDs
+                let port_id = types::PortId::PortComponent(id);
+                client.interface_set_port_id(&iface, &port_id).await
+            }
+            IfaceSetProp::Ttl { iface, ttl } => {
+                client.interface_set_ttl(&iface, ttl).await
+            }
+            IfaceSetProp::PortDescription { iface, desc } => {
+                client.interface_set_port_description(&iface, &desc).await
+            }
+            IfaceSetProp::SystemName { iface, name } => {
+                client.interface_set_system_name(&iface, &name).await
+            }
+            IfaceSetProp::SystemDescription { iface, desc } => {
+                client.interface_set_system_description(&iface, &desc).await
+            }
+        },
+        IfaceProp::Del(del) => match del {
+            IfaceDelProp::ChassisId { iface } => {
+                client.interface_del_chassis_id(&iface).await
+            }
+            IfaceDelProp::PortId { iface } => {
+                client.interface_del_port_id(&iface).await
+            }
+            IfaceDelProp::Ttl { iface } => {
+                client.interface_del_ttl(&iface).await
+            }
+            IfaceDelProp::PortDescription { iface } => {
+                client.interface_del_port_description(&iface).await
+            }
+            IfaceDelProp::SystemName { iface } => {
+                client.interface_del_system_name(&iface).await
+            }
+            IfaceDelProp::SystemDescription { iface } => {
+                client.interface_del_system_description(&iface).await
+            }
+        },
+    }
+    .map(|r| r.into_inner())
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
 fn interface_capability(cap: Capability) -> anyhow::Result<()> {
@@ -259,9 +421,23 @@ fn interface_capability(cap: Capability) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn interface_addr(addr: Address) -> anyhow::Result<()> {
-    println!("{addr:?}");
-    Ok(())
+async fn interface_addr(
+    client: &Client,
+    addr: IfaceAddress,
+) -> anyhow::Result<()> {
+    match addr {
+        IfaceAddress::Add { iface, addr } => {
+            client.interface_add_management_addr(&iface, &addr).await
+        }
+        IfaceAddress::Del { iface, addr } => {
+            client.interface_del_management_addr(&iface, &addr).await
+        }
+        IfaceAddress::Clear { iface } => {
+            client.interface_clear_management_addr(&iface).await
+        }
+    }
+    .map(|r| r.into_inner())
+    .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -276,6 +452,11 @@ async fn main() -> anyhow::Result<()> {
 
     match opts.cmd {
         Commands::BuildInfo => build_info(&client).await,
+        Commands::System(sub) => match sub {
+            System::Prop(prop) => system_prop(&client, prop).await,
+            System::Capability(cap) => system_capability(cap),
+            System::Address(address) => system_addr(&client, address).await,
+        },
         Commands::Interface(sub) => match sub {
             Interface::Add {
                 chassis_id,
@@ -305,9 +486,11 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .map(|r| r.into_inner())
                 .context("failed to remove interface"),
-            Interface::Prop(prop) => interface_prop(prop),
+            Interface::Prop(prop) => interface_prop(&client, prop).await,
             Interface::Capability(cap) => interface_capability(cap),
-            Interface::Address(address) => interface_addr(address),
+            Interface::Address(address) => {
+                interface_addr(&client, address).await
+            }
             Interface::Get { iface } => {
                 println!("get {iface}");
                 Ok(())

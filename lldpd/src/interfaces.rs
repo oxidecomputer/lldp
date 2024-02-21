@@ -41,8 +41,8 @@ pub struct Interface {
     pub system_description: Option<String>,
     pub port_description: Option<String>,
 
-    pub ipv4: Vec<Ipv4Addr>,
-    pub ipv6: Vec<Ipv6Addr>,
+    pub ipv4: Option<Vec<Ipv4Addr>>,
+    pub ipv6: Option<Vec<Ipv6Addr>>,
 
     exit_tx: oneshot::Sender<()>,
 }
@@ -63,7 +63,9 @@ async fn get_links() -> LldpdResult<BTreeMap<String, String>> {
     let mut rval = BTreeMap::new();
     let mut idx = 0;
     for line in std::str::from_utf8(&out.stdout)
-        .map_err(|e| LldpdError::Other(format!("while reading dladm outout: {e:?}")))?
+        .map_err(|e| {
+            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
+        })?
         .lines()
     {
         idx += 1;
@@ -87,13 +89,18 @@ async fn get_mac(dladm_args: Vec<&str>) -> LldpdResult<MacAddr> {
         )));
     }
     let lines: Vec<&str> = std::str::from_utf8(&out.stdout)
-        .map_err(|e| LldpdError::Other(format!("while reading dladm outout: {e:?}")))?
+        .map_err(|e| {
+            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
+        })?
         .lines()
         .collect();
     if lines.len() == 1 {
         let mac = lines[0];
-        mac.parse::<MacAddr>()
-            .map_err(|e| LldpdError::Other(format!("failed to parse mac address {mac}: {e:?}")))
+        mac.parse::<MacAddr>().map_err(|e| {
+            LldpdError::Other(format!(
+                "failed to parse mac address {mac}: {e:?}"
+            ))
+        })
     } else {
         Err(LldpdError::Other("invalid dladm output".to_string()))
     }
@@ -140,7 +147,11 @@ fn pcap_open_duplex(iface: &str) -> LldpdResult<(pcap::Pcap, pcap::Pcap)> {
     Ok((pcap_in, pcap_out))
 }
 
-pub fn build_lldpdu(switchinfo: &crate::SwitchInfo, name: &str, iface: &Interface) -> Lldpdu {
+pub fn build_lldpdu(
+    switchinfo: &crate::SwitchInfo,
+    name: &str,
+    iface: &Interface,
+) -> Lldpdu {
     let chassis_id = match &iface.chassis_id {
         Some(c) => c.to_string(),
         None => switchinfo.chassis_id.to_string(),
@@ -155,14 +166,16 @@ pub fn build_lldpdu(switchinfo: &crate::SwitchInfo, name: &str, iface: &Interfac
     let enabled = avail.clone();
 
     let mut management_addresses = Vec::new();
-    for ipv4 in &iface.ipv4 {
+    let ipv4_addrs = iface.ipv4.as_ref().unwrap_or_else(|| &switchinfo.ipv4);
+    for ipv4 in ipv4_addrs {
         management_addresses.push(protocol::ManagementAddress {
             addr: (*ipv4).into(),
             interface_num: protocol::InterfaceNum::Unknown(0),
             oid: None,
         });
     }
-    for ipv6 in &iface.ipv6 {
+    let ipv6_addrs = iface.ipv6.as_ref().unwrap_or_else(|| &switchinfo.ipv6);
+    for ipv6 in ipv6_addrs {
         management_addresses.push(protocol::ManagementAddress {
             addr: (*ipv6).into(),
             interface_num: protocol::InterfaceNum::Unknown(0),
@@ -205,7 +218,11 @@ async fn xmit_lldpdu(pcap: &pcap::Pcap, packet: Packet) -> LldpdResult<i32> {
         .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
 }
 
-fn try_add(g: &Global, name: &str, interface: Option<Interface>) -> LldpdResult<()> {
+fn try_add(
+    g: &Global,
+    name: &str,
+    interface: Option<Interface>,
+) -> LldpdResult<()> {
     let mut iface_hash = g.interfaces.lock().unwrap();
     if iface_hash.get(name).is_some() {
         return Err(LldpdError::Exists("interface already added".into()));
@@ -352,7 +369,10 @@ async fn interface_loop(
 }
 
 #[allow(unused_variables)]
-async fn get_iface_mac(g: &Global, name: &str) -> LldpdResult<(String, MacAddr)> {
+async fn get_iface_mac(
+    g: &Global,
+    name: &str,
+) -> LldpdResult<(String, MacAddr)> {
     #[cfg(feature = "dendrite")]
     if name.contains('/') {
         return crate::dendrite::dpd_tfport(g, &name).await;
@@ -366,7 +386,9 @@ async fn get_iface_mac(g: &Global, name: &str) -> LldpdResult<(String, MacAddr)>
         Some("tfport") => Err(LldpdError::Invalid(
             "cannot use LLDP with a tfport - use the sidecar link".into(),
         )),
-        Some(x) => Err(LldpdError::Invalid(format!("cannot use LLDP on {x} links"))),
+        Some(x) => {
+            Err(LldpdError::Invalid(format!("cannot use LLDP on {x} links")))
+        }
         None => Err(LldpdError::Missing("no such link".into())),
     }?;
     Ok((iface, mac))
@@ -398,14 +420,15 @@ pub async fn interface_add(
         system_name,
         system_description,
         port_description,
-        ipv4: Vec::new(),
-        ipv6: Vec::new(),
+        ipv4: None,
+        ipv6: None,
         exit_tx,
     };
 
     try_add(global, &name, Some(interface))?;
     let global = global.clone();
-    let _hdl =
-        tokio::task::spawn(async move { interface_loop(global, name, iface, exit_rx).await });
+    let _hdl = tokio::task::spawn(async move {
+        interface_loop(global, name, iface, exit_rx).await
+    });
     Ok(())
 }

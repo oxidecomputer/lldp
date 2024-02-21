@@ -43,8 +43,9 @@ fn copylinks(dst: &str, links: HashMap<String, String>) -> Result<()> {
     for (tgt, orig) in links {
         println!("-- Linking: {} to {}", tgt, orig);
         let link_file = dst_dir.join(&tgt);
-        std::os::unix::fs::symlink(&orig, &link_file)
-            .with_context(|| format!("linking {:?} to {:?}", link_file, orig))?;
+        std::os::unix::fs::symlink(&orig, &link_file).with_context(|| {
+            format!("linking {:?} to {:?}", link_file, orig)
+        })?;
     }
     Ok(())
 }
@@ -68,8 +69,9 @@ fn copyfiles<T: ToString>(src: &str, dst: &str, file: &[T]) -> Result<()> {
         let src_file = src_dir.join(&f);
         let dst_file = dst_dir.join(&f);
         println!("-- Installing: {:?}", dst_file);
-        fs::copy(src_file, dst_file)
-            .with_context(|| format!("copying {:?} from {} to {}", f, src, dst))?;
+        fs::copy(src_file, dst_file).with_context(|| {
+            format!("copying {:?} from {} to {}", f, src, dst)
+        })?;
     }
 
     Ok(())
@@ -114,7 +116,8 @@ pub fn codegen(opts: CodegenOptions) -> Result<()> {
         name => format!("{}/{}/p4", root, name),
     };
     let tgt_path = format!("{}/target", root);
-    let bin_path = format!("{}/proto/opt/oxide/dendrite/{}", tgt_path, opts.name);
+    let bin_path =
+        format!("{}/proto/opt/oxide/dendrite/{}", tgt_path, opts.name);
 
     println!("using Tofino SDE at {}", opts.sde);
     // Construct a new writeable build directory, using the CMake files from
@@ -248,8 +251,9 @@ fn collect(src: &str, dst: &str, files: Vec<&str>) -> Result<()> {
         let src_file = src_dir.join(f);
         let dst_file = dst_dir.join(f);
         println!("-- Installing: {:?}", dst_file);
-        std::fs::copy(src_file, dst_file)
-            .with_context(|| format!("copying {:?} from {} to {}", f, src, dst))?;
+        std::fs::copy(src_file, dst_file).with_context(|| {
+            format!("copying {:?} from {} to {}", f, src, dst)
+        })?;
     }
     Ok(())
 }
@@ -298,7 +302,11 @@ pub async fn dist(
     {
         let lib = Path::new("tools/remote_model/remote_model.so");
         if lib.is_file() {
-            collect("./tools/remote_model", &lib_root, vec!["remote_model.so"])?;
+            collect(
+                "./tools/remote_model",
+                &lib_root,
+                vec!["remote_model.so"],
+            )?;
         } else {
             println!("{:?} not built - skipping", lib);
         }

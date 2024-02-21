@@ -67,6 +67,211 @@ impl Default for BuildInfo {
     }
 }
 
+/// Set the default chassis ID advertised on all ports
+#[endpoint {
+	method = POST,
+	path = "/system/chassis_id",
+}]
+async fn sys_set_chassis_id(
+    rqctx: RequestContext<Arc<Global>>,
+    body: TypedBody<protocol::ChassisId>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let val = body.into_inner();
+    debug!(global.log, "set chassis_id = {:?}", val);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Set the default TTL advertised on all ports
+#[endpoint {
+	method = POST,
+	path = "/system/ttl",
+}]
+async fn sys_set_ttl(
+    rqctx: RequestContext<Arc<Global>>,
+    body: TypedBody<u16>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let val = body.into_inner();
+    debug!(global.log, "set ttl = {:?}", val);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Set the default system name advertised on all ports
+#[endpoint {
+	method = POST,
+	path = "/system/system_name",
+}]
+async fn sys_set_system_name(
+    rqctx: RequestContext<Arc<Global>>,
+    body: TypedBody<String>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let val = body.into_inner();
+    debug!(global.log, "set system_name = {:?}", val);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Delete default system name advertised on all ports.  A system name will
+/// only be advertised on those interfaces with a locally set system name.
+#[endpoint {
+    method = DELETE,
+    path = "/system/system_name",
+}]
+async fn sys_del_system_name(
+    rqctx: RequestContext<Arc<Global>>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    debug!(global.log, "delete system_name");
+    Ok(HttpResponseDeleted())
+}
+
+/// Set the default system description advertised on all interfaces
+#[endpoint {
+	method = POST,
+	path = "/system/system_description",
+}]
+async fn sys_set_system_description(
+    rqctx: RequestContext<Arc<Global>>,
+    body: TypedBody<String>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let val = body.into_inner();
+    debug!(global.log, "set system_description = {:?}", val);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Delete default system description advertised on all interfaces.  A system name will
+/// only be advertised on those interfaces with a locally set system description.
+#[endpoint {
+    method = DELETE,
+    path = "/system/system_description",
+}]
+async fn sys_del_system_description(
+    rqctx: RequestContext<Arc<Global>>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    debug!(global.log, "delete system_description");
+    Ok(HttpResponseDeleted())
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+struct SystemCapabilityPathParams {
+    capability: protocol::SystemCapabilities,
+}
+
+/// Add a capability to the set of those advertised on all interfaces
+#[endpoint {
+	method = POST,
+	path = "/system/system_capability/{capability}",
+}]
+async fn sys_add_system_capability(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemCapabilityPathParams>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "set system_capability {:?}", inner.capability);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Remove a capability from the set of those advertised on all interfaces
+#[endpoint {
+	method = DELETE,
+	path = "/system/system_capability/{capability}",
+}]
+async fn sys_del_system_capability(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemCapabilityPathParams>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "clear system_capability {:?}", inner.capability);
+    Ok(HttpResponseDeleted())
+}
+
+/// Add a capability to the set of those advertised as enabled on all interfaces
+#[endpoint {
+	method = POST,
+	path = "/system/enabled_capability/{capability}",
+}]
+async fn sys_enable_system_capability(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemCapabilityPathParams>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(
+        global.log,
+        "enable system_capability {:?}", inner.capability
+    );
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Remove a capability from the set of those advertised as enabled on all interfaces
+#[endpoint {
+	method = DELETE,
+	path = "/system/enabled_capability/{capability}",
+}]
+async fn sys_disable_system_capability(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemCapabilityPathParams>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "clear system_capability {:?}", inner.capability);
+    Ok(HttpResponseDeleted())
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+struct SystemAddressPathParams {
+    address: IpAddr,
+}
+
+/// Add a management address to the set of those advertised on all interfaces
+#[endpoint {
+	method = POST,
+	path = "/system/management_address/{address}",
+}]
+async fn sys_add_management_addr(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemAddressPathParams>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "add management address {}", inner.address);
+    Ok(HttpResponseUpdatedNoContent())
+}
+
+/// Remove a management address from the set of those advertised on all interfaces
+#[endpoint {
+	method = DELETE,
+	path = "/system/management_address/{address}",
+}]
+async fn sys_del_management_addr(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<SystemAddressPathParams>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "remove management address {}", inner.address);
+    Ok(HttpResponseDeleted())
+}
+
+/// Remove all management addresses from the set of those advertised on all
+/// interfaces
+#[endpoint {
+	method = DELETE,
+	path = "/system/management_address",
+}]
+async fn sys_clear_management_addr(
+    rqctx: RequestContext<Arc<Global>>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    debug!(global.log, "clear all management addresses");
+    Ok(HttpResponseDeleted())
+}
+
 /// A local interface on which we are listening for, and dispatching, LLDPDUs
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct Interface {
@@ -465,6 +670,20 @@ async fn interface_del_management_addr(
     Ok(HttpResponseDeleted())
 }
 
+#[endpoint {
+	method = DELETE,
+	path = "/interface/{iface}/management_address",
+}]
+async fn interface_clear_management_addr(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<InterfacePathParams>,
+) -> Result<HttpResponseDeleted, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    debug!(global.log, "clear management addresses on {}", inner.iface);
+    Ok(HttpResponseDeleted())
+}
+
 /// A remote system that has been discovered on one of our configured interfaces
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct Neighbor {
@@ -629,6 +848,21 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     let mut api = dropshot::ApiDescription::new();
 
     api.register(build_info).unwrap();
+    api.register(sys_set_chassis_id).unwrap();
+    api.register(sys_set_ttl).unwrap();
+    api.register(sys_set_system_name).unwrap();
+    api.register(sys_del_system_name).unwrap();
+    api.register(sys_set_system_description).unwrap();
+    api.register(sys_del_system_description).unwrap();
+    api.register(sys_add_system_capability).unwrap();
+    api.register(sys_del_system_capability).unwrap();
+    api.register(sys_enable_system_capability).unwrap();
+    api.register(sys_disable_system_capability).unwrap();
+    api.register(sys_add_management_addr).unwrap();
+    api.register(sys_del_management_addr).unwrap();
+    api.register(sys_clear_management_addr).unwrap();
+    //api.register(sys_add_org_specific).unwrap();
+    //api.register(sys_del_org_specific).unwrap();
     api.register(interface_add).unwrap();
     api.register(interface_del).unwrap();
     api.register(interface_list).unwrap();
@@ -650,6 +884,7 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     api.register(interface_disable_system_capability).unwrap();
     api.register(interface_add_management_addr).unwrap();
     api.register(interface_del_management_addr).unwrap();
+    api.register(interface_clear_management_addr).unwrap();
     //api.register(interface_add_org_specific).unwrap();
     //api.register(interface_del_org_specific).unwrap();
     api.register(get_neighbors).unwrap();

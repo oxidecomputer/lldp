@@ -14,6 +14,8 @@
 //   Add optional interface arg to get_neighbors()
 
 use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -51,7 +53,7 @@ pub struct Global {
     pub switchinfo: Mutex<SwitchInfo>,
     /// List of addresses on which the api_server should listen.
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
-    /// List of interfaces we ar managing
+    /// List of interfaces we are managing
     pub interfaces: Mutex<BTreeMap<String, Interface>>,
     /// All of the neighbors we are tracking
     pub neighbors: Mutex<BTreeMap<NeighborId, Neighbor>>,
@@ -82,6 +84,8 @@ pub struct SwitchInfo {
     pub chassis_id: String,
     pub system_name: String,
     pub system_description: String,
+    pub ipv4: Vec<Ipv4Addr>,
+    pub ipv6: Vec<Ipv6Addr>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -124,7 +128,11 @@ pub(crate) struct Opt {
     )]
     chassis_id: Option<String>,
 
-    #[structopt(long = "name", short = "n", about = "String to use as the SystemName")]
+    #[structopt(
+        long = "name",
+        short = "n",
+        about = "String to use as the SystemName"
+    )]
     system_name: Option<String>,
 
     #[structopt(
@@ -137,7 +145,8 @@ pub(crate) struct Opt {
 
 #[allow(unused_variables)]
 fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
-    const SIGNALS: &[std::ffi::c_int] = &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR2];
+    const SIGNALS: &[std::ffi::c_int] =
+        &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR2];
     let mut sigs = Signals::new(SIGNALS).unwrap();
 
     let log = g.log.new(slog::o!("unit" => "signal-handler"));
@@ -161,7 +170,8 @@ fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
 fn get_uname(opt: &str) -> String {
     const UNAME: &str = "/usr/bin/uname";
 
-    if let Ok(out) = std::process::Command::new(UNAME).args(vec![opt]).output() {
+    if let Ok(out) = std::process::Command::new(UNAME).args(vec![opt]).output()
+    {
         if out.status.success() {
             return String::from_utf8_lossy(&out.stdout).trim().to_string();
         }
@@ -183,6 +193,8 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
             Some(d) => d.to_string(),
             None => format!("{} {}", get_uname("-o"), get_uname("-m")),
         },
+        ipv4: Vec::new(),
+        ipv6: Vec::new(),
     }
 }
 
@@ -205,10 +217,9 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     }
 
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
-    let api_server_manager = tokio::task::spawn(api_server::api_server_manager(
-        global.clone(),
-        api_rx.clone(),
-    ));
+    let api_server_manager = tokio::task::spawn(
+        api_server::api_server_manager(global.clone(), api_rx.clone()),
+    );
 
     signal_handler(global.clone(), api_tx);
 

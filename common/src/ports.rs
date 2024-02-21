@@ -8,7 +8,16 @@ use serde::Serialize;
 
 macro_rules! make_port_type {
     ($name:ident, $prefix:literal) => {
-        #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            Deserialize,
+            Eq,
+            JsonSchema,
+            PartialEq,
+            Serialize,
+        )]
         pub struct $name(pub(crate) u8);
 
         impl From<u8> for $name {
