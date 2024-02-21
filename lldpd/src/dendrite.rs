@@ -40,7 +40,7 @@ pub async fn dpd_tfport(
         .map_err(|e| LldpdError::DpdClientError(e.to_string()))?;
     let iface = format!("tfport{}_{}", port_id, link_id.to_string());
     let mac = link_info.into_inner().address;
-    Ok((iface, mac.into()))
+    Ok((iface, mac))
 }
 
 async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
@@ -71,7 +71,7 @@ pub async fn dpd_init(
         None
     } else {
         let host = opts.host.unwrap_or_else(|| "localhost".to_string());
-        let port = opts.port.unwrap_or_else(|| dpd_client::DEFAULT_PORT);
+        let port = opts.port.unwrap_or(dpd_client::DEFAULT_PORT);
         info!(log, "connecting to dpd at {host}:{port}");
         let client_state = ClientState {
             tag: String::from("lldpd"),
@@ -83,7 +83,7 @@ pub async fn dpd_init(
         info!(
             log,
             "connected to dpd running {}",
-            dpd_version(&log, &client).await
+            dpd_version(log, &client).await
         );
         Some(client)
     }

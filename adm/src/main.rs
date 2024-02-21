@@ -250,8 +250,8 @@ async fn build_info(client: &Client) -> anyhow::Result<()> {
 }
 
 fn display_sysinfo(s: &types::SystemInfo) {
-    println!("\tChassisID: {}", s.chassis_id);
-    println!("\tPortId: {}", s.port_id);
+    println!("\tChassisID: {:?}", s.chassis_id);
+    println!("\tPortId: {:?}", s.port_id);
     println!("\tTTL:  {} seconds", s.ttl);
     if let Some(s) = &s.port_description {
         println!("\tPortDescription: {s}");
@@ -267,7 +267,7 @@ fn display_sysinfo(s: &types::SystemInfo) {
     if !s.management_addresses.is_empty() {
         println!("\tManagement addresses:");
         for ma in &s.management_addresses {
-            println!("\t\t{ma}");
+            println!("\t\t{ma:?}");
         }
     }
     if !s.organizationally_specific.is_empty() {
@@ -473,7 +473,9 @@ async fn main() -> anyhow::Result<()> {
             } => {
                 // TODO-completeness: allow for other types of chassis ID
                 let chassis_id =
-                    chassis_id.map(|c| types::ChassisId::ChassisComponent(c));
+                    chassis_id.map(types::ChassisId::ChassisComponent);
+                // TODO-completeness: allow for other types of port ID
+                let port_id = port_id.map(types::PortId::PortComponent);
                 let add_args = types::InterfaceAdd {
                     chassis_id,
                     port_id,
@@ -498,10 +500,11 @@ async fn main() -> anyhow::Result<()> {
             Interface::Address(address) => {
                 interface_addr(&client, address).await
             }
-            Interface::Get { iface } => {
-                println!("get {iface}");
-                Ok(())
-            }
+            Interface::Get { iface } => client
+                .interface_get(&iface)
+                .await
+                .map(|r| display_interface(&r.into_inner()))
+                .context("failed to remove interface"),
             Interface::List => client
                 .interface_list()
                 .await

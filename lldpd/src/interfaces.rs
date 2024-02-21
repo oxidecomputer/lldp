@@ -37,7 +37,7 @@ pub struct Interface {
     pub mac: MacAddr,
 
     pub chassis_id: Option<protocol::ChassisId>,
-    pub port_id: Option<String>,
+    pub port_id: Option<protocol::PortId>,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
@@ -165,11 +165,11 @@ pub fn build_lldpdu(
     iface: &Interface,
 ) -> Lldpdu {
     let chassis_id = match &iface.chassis_id {
-        Some(c) => c.to_string(),
-        None => switchinfo.chassis_id.to_string(),
+        Some(c) => c.clone(),
+        None => switchinfo.chassis_id.clone(),
     };
     let port_id = match &iface.port_id {
-        Some(port_id) => protocol::PortId::InterfaceAlias(port_id.to_string()),
+        Some(p) => p.clone(),
         None => protocol::PortId::InterfaceName(name.to_string()),
     };
 
@@ -181,7 +181,7 @@ pub fn build_lldpdu(
     let addrs = iface
         .management_addrs
         .as_ref()
-        .unwrap_or_else(|| &switchinfo.management_addrs);
+        .unwrap_or(&switchinfo.management_addrs);
     for addr in addrs {
         management_addresses.push(protocol::ManagementAddress {
             addr: *addr,
@@ -190,14 +190,22 @@ pub fn build_lldpdu(
         });
     }
 
+    let system_name = match &iface.system_name {
+        Some(n) => Some(n.clone()),
+        None => switchinfo.system_name.clone(),
+    };
+    let system_description = match &iface.system_description {
+        Some(d) => Some(d.clone()),
+        None => switchinfo.system_description.clone(),
+    };
     Lldpdu {
-        chassis_id: protocol::ChassisId::ChassisComponent(chassis_id),
+        chassis_id,
         port_id,
         ttl: iface.ttl.unwrap_or(DEFAULT_TTL),
-        system_description: Some(switchinfo.system_description.to_string()),
         system_capabilities: Some((avail, enabled)),
-        port_description: None,
-        system_name: None,
+        port_description: iface.port_description.clone(),
+        system_name,
+        system_description,
         management_addresses,
         organizationally_specific: Vec::new(),
     }
@@ -388,7 +396,7 @@ async fn get_iface_mac(
 ) -> LldpdResult<(String, MacAddr)> {
     #[cfg(feature = "dendrite")]
     if name.contains('/') {
-        return crate::dendrite::dpd_tfport(g, &name).await;
+        return crate::dendrite::dpd_tfport(g, name).await;
     }
 
     let links = get_links().await?;
@@ -412,7 +420,7 @@ pub async fn interface_add(
     global: &Arc<Global>,
     name: String,
     chassis_id: Option<protocol::ChassisId>,
-    port_id: Option<String>,
+    port_id: Option<protocol::PortId>,
     ttl: Option<u16>,
     system_name: Option<String>,
     system_description: Option<String>,
@@ -473,10 +481,6 @@ pub fn chassis_id_set(
 	    "iface" => name, "chassis_id" => chassis_id.to_string());
     let iface_hash = g.interfaces.lock().unwrap();
     let mut iface = get_interface!(iface_hash, name)?;
-
-    if iface.chassis_id.is_some() {
-        debug!(g.log, "replacing existing chassis ID"; "iface" => name);
-    }
     iface.chassis_id = Some(chassis_id);
     Ok(())
 }
@@ -487,6 +491,117 @@ pub fn chassis_id_del(g: &Global, name: &String) -> LldpdResult<()> {
     let iface_hash = g.interfaces.lock().unwrap();
     let mut iface = get_interface!(iface_hash, name)?;
     iface.chassis_id = None;
+    Ok(())
+}
+
+/// Set the port id
+pub fn port_id_set(
+    g: &Global,
+    name: &String,
+    port_id: protocol::PortId,
+) -> LldpdResult<()> {
+    info!(g.log, "setting port ID";
+	    "iface" => name, "port_id" => port_id.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.port_id = Some(port_id);
+    Ok(())
+}
+
+/// Clearing the port id
+pub fn port_id_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing port ID"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.port_id = None;
+    Ok(())
+}
+
+/// Set the interface-local ttl
+pub fn ttl_set(g: &Global, name: &String, ttl: u16) -> LldpdResult<()> {
+    info!(g.log, "setting interface-level port ID";
+	    "iface" => name, "ttl" => ttl);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.ttl = Some(ttl);
+    Ok(())
+}
+
+/// Clearing the interface-local ttl
+pub fn ttl_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing interface-level port ID"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.ttl = None;
+    Ok(())
+}
+
+/// Set the port description
+pub fn port_desc_set(
+    g: &Global,
+    name: &String,
+    desc: &String,
+) -> LldpdResult<()> {
+    info!(g.log, "setting port description";
+	    "iface" => name, "port_desc" => desc.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.port_description = Some(desc.to_string());
+    Ok(())
+}
+
+/// Clearing the port description
+pub fn port_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing interface-level port ID"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.port_description = None;
+    Ok(())
+}
+
+/// Set the interface-local system name
+pub fn system_name_set(
+    g: &Global,
+    name: &String,
+    sysname: &String,
+) -> LldpdResult<()> {
+    info!(g.log, "setting interface-level system name";
+	    "iface" => name, "sysname" =>sysname.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.system_name = Some(sysname.to_string());
+    Ok(())
+}
+
+/// Clearing the interface-local system name
+pub fn system_name_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing interface-level port ID"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.system_name = None;
+    Ok(())
+}
+
+/// Set the interface-local system name
+pub fn system_desc_set(
+    g: &Global,
+    name: &String,
+    sysdesc: &String,
+) -> LldpdResult<()> {
+    info!(g.log, "setting interface-level system description";
+	    "iface" => name, "sysdesc" =>sysdesc.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.system_description = Some(sysdesc.to_string());
+    Ok(())
+}
+
+/// Clearing the interface-local system description
+pub fn system_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing interface-level system description"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.system_description = None;
     Ok(())
 }
 
@@ -502,7 +617,7 @@ pub fn addr_delete(
     let mut iface = get_interface!(iface_hash, name)?;
 
     if let Some(addrs) = &mut iface.management_addrs {
-        if addrs.remove(&addr) {
+        if addrs.remove(addr) {
             Ok(())
         } else {
             Err(LldpdError::Missing(format!("no such address: {addr}")))

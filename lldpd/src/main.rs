@@ -81,9 +81,9 @@ impl Global {
 
 #[derive(Debug, Clone)]
 pub struct SwitchInfo {
-    pub chassis_id: String,
-    pub system_name: String,
-    pub system_description: String,
+    pub chassis_id: protocol::ChassisId,
+    pub system_name: Option<String>,
+    pub system_description: Option<String>,
     pub management_addrs: BTreeSet<IpAddr>,
 }
 
@@ -179,19 +179,22 @@ fn get_uname(opt: &str) -> String {
 }
 
 fn get_switchinfo(opts: &Opt) -> SwitchInfo {
+    let chassis_id = match &opts.chassis_id {
+        Some(c) => c.to_string(),
+        None => get_uname("-n"),
+    };
+    let system_name = match &opts.system_name {
+        Some(s) => s.to_string(),
+        None => get_uname("-m"),
+    };
+    let system_description = match &opts.system_description {
+        Some(d) => d.to_string(),
+        None => get_uname("-a"),
+    };
     SwitchInfo {
-        chassis_id: match &opts.chassis_id {
-            Some(c) => c.to_string(),
-            None => get_uname("-n"),
-        },
-        system_name: match &opts.system_name {
-            Some(s) => s.to_string(),
-            None => get_uname("-m"),
-        },
-        system_description: match &opts.system_description {
-            Some(d) => d.to_string(),
-            None => format!("{} {}", get_uname("-o"), get_uname("-m")),
-        },
+        chassis_id: protocol::ChassisId::ChassisComponent(chassis_id),
+        system_name: Some(system_name),
+        system_description: Some(system_description),
         management_addrs: BTreeSet::new(),
     }
 }

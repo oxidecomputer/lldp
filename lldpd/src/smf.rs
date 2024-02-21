@@ -3,6 +3,7 @@ use crucible_smf::PropertyGroup;
 use slog::debug;
 use slog::error;
 
+use crate::protocol::ChassisId;
 use crate::types::LldpdError;
 use crate::types::LldpdResult;
 
@@ -87,9 +88,10 @@ pub fn refresh_smf_config(g: &crate::Global) -> LldpdResult<()> {
     let mut s = g.switchinfo.lock().unwrap();
     if let Ok(id) = get_properties(&pg, SMF_SCRIMLET_ID_PROP) {
         debug!(g.log, "config/{SMF_SCRIMLET_ID_PROP}: {id:?}");
+        let chassis_id = ChassisId::ChassisComponent(id[0].to_string());
         if !id.is_empty() {
-            s.chassis_id = id[0].clone();
-            s.system_name = id[0].clone();
+            s.chassis_id = chassis_id;
+            s.system_name = Some(id[0].clone());
         }
     }
     let mut desc = Vec::new();
@@ -106,7 +108,7 @@ pub fn refresh_smf_config(g: &crate::Global) -> LldpdResult<()> {
         }
     }
     if !desc.is_empty() {
-        s.system_description = desc.join(", ");
+        s.system_description = Some(desc.join(", "));
     }
 
     Ok(())

@@ -28,6 +28,7 @@ use slog::o;
 use crate::interfaces;
 use crate::protocol;
 use crate::types;
+use crate::types::LldpdError;
 use crate::Global;
 
 type ApiServer = dropshot::HttpServer<Arc<Global>>;
@@ -285,7 +286,7 @@ pub struct Interface {
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct InterfaceAdd {
     pub chassis_id: Option<protocol::ChassisId>,
-    pub port_id: Option<String>,
+    pub port_id: Option<protocol::PortId>,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
@@ -337,6 +338,43 @@ async fn interface_del(
     let interface = path.into_inner().iface;
     debug!(global.log, "deleted  {interface}");
     Ok(HttpResponseDeleted())
+}
+
+#[endpoint {
+    method = GET,
+    path = "/interface/{iface}",
+}]
+async fn interface_get(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<InterfacePathParams>,
+) -> Result<HttpResponseOk<Interface>, HttpError> {
+    let global: &Global = rqctx.context();
+    let switchinfo = global.switchinfo.lock().unwrap().clone();
+    let interface = path.into_inner().iface;
+
+    Ok(HttpResponseOk(
+        global
+            .interfaces
+            .lock()
+            .unwrap()
+            .get(&interface)
+            .ok_or_else(|| {
+                LldpdError::Missing(format!("no such interface: {interface}"))
+            })
+            .map(|iface| {
+                let i = iface.lock().unwrap();
+                Interface {
+                    port: interface.clone(),
+                    iface: i.iface.clone(),
+                    system_info: (&interfaces::build_lldpdu(
+                        &switchinfo,
+                        &interface,
+                        &i,
+                    ))
+                        .into(),
+                }
+            })?,
+    ))
 }
 
 #[endpoint {
@@ -415,8 +453,9 @@ async fn interface_set_port_id(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(global.log, "set port_id = {:?} on {}", val, inner.iface);
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::port_id_set(global, &inner.iface, val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -429,8 +468,9 @@ async fn interface_del_port_id(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete port_id on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::port_id_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -445,8 +485,9 @@ async fn interface_set_ttl(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(global.log, "set ttl = {:?} on {}", val, inner.iface);
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::ttl_set(global, &inner.iface, val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -459,8 +500,9 @@ async fn interface_del_ttl(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete ttl on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::ttl_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -475,11 +517,9 @@ async fn interface_set_port_description(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(
-        global.log,
-        "set port_description = {:?} on {}", val, inner.iface
-    );
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::port_desc_set(global, &inner.iface, &val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -492,8 +532,9 @@ async fn interface_del_port_description(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete port_description on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::port_desc_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -508,8 +549,9 @@ async fn interface_set_system_name(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(global.log, "set system_name = {:?} on {}", val, inner.iface);
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::system_name_set(global, &inner.iface, &val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -522,8 +564,9 @@ async fn interface_del_system_name(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete system_name on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::system_name_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -538,11 +581,9 @@ async fn interface_set_system_description(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(
-        global.log,
-        "set system_description = {:?} on {}", val, inner.iface
-    );
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::system_desc_set(global, &inner.iface, &val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -555,8 +596,9 @@ async fn interface_del_system_description(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete system_description on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::system_desc_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
@@ -638,6 +680,9 @@ async fn interface_disable_system_capability(
 struct InterfaceAddressPathParams {
     /// The switch port on which to operate.
     iface: String,
+    /// Management Address to advertise on this port
+    // TODO-completeness: this should allow non-IP addresses to be specified (as
+    // per the standard) and should include an optional interface number.
     address: IpAddr,
 }
 
@@ -868,6 +913,7 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     api.register(interface_add).unwrap();
     api.register(interface_del).unwrap();
     api.register(interface_list).unwrap();
+    api.register(interface_get).unwrap();
     api.register(interface_set_chassis_id).unwrap();
     api.register(interface_del_chassis_id).unwrap();
     api.register(interface_del_port_id).unwrap();

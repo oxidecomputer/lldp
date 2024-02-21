@@ -62,6 +62,38 @@
       }
     },
     "/interface/{iface}": {
+      "get": {
+        "operationId": "interface_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Interface"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
       "put": {
         "operationId": "interface_add",
         "parameters": [
@@ -298,6 +330,7 @@
           {
             "in": "path",
             "name": "address",
+            "description": "Management Address to advertise on this port",
             "required": true,
             "schema": {
               "type": "string",
@@ -332,6 +365,7 @@
           {
             "in": "path",
             "name": "address",
+            "description": "Management Address to advertise on this port",
             "required": true,
             "schema": {
               "type": "string",
@@ -1297,7 +1331,11 @@
           },
           "port_id": {
             "nullable": true,
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PortId"
+              }
+            ]
           },
           "system_description": {
             "nullable": true,
@@ -1314,6 +1352,52 @@
             "minimum": 0
           }
         }
+      },
+      "InterfaceNum": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "Unknown": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "Unknown"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "IfIndex": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "IfIndex"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "PortNumber": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "PortNumber"
+            ],
+            "additionalProperties": false
+          }
+        ]
       },
       "MacAddr": {
         "description": "An EUI-48 MAC address, used for layer-2 addressing.",
@@ -1332,6 +1416,26 @@
         },
         "required": [
           "a"
+        ]
+      },
+      "ManagementAddress": {
+        "type": "object",
+        "properties": {
+          "addr": {
+            "type": "string",
+            "format": "ip"
+          },
+          "interface_num": {
+            "$ref": "#/components/schemas/InterfaceNum"
+          },
+          "oid": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "addr",
+          "interface_num"
         ]
       },
       "Neighbor": {
@@ -1487,12 +1591,12 @@
             }
           },
           "chassis_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ChassisId"
           },
           "management_addresses": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ManagementAddress"
             }
           },
           "organizationally_specific": {
@@ -1506,7 +1610,7 @@
             "type": "string"
           },
           "port_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/PortId"
           },
           "system_description": {
             "nullable": true,

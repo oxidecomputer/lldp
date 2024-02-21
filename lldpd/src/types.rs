@@ -11,15 +11,15 @@ pub type LldpdResult<T> = Result<T, LldpdError>;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct SystemInfo {
-    pub chassis_id: String,
-    pub port_id: String,
+    pub chassis_id: protocol::ChassisId,
+    pub port_id: protocol::PortId,
     pub ttl: u16,
     pub port_description: Option<String>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub capabilities_available: Vec<protocol::SystemCapabilities>,
     pub capabilities_enabled: Vec<protocol::SystemCapabilities>,
-    pub management_addresses: Vec<String>,
+    pub management_addresses: Vec<protocol::ManagementAddress>,
     pub organizationally_specific: Vec<String>,
 }
 
@@ -59,23 +59,19 @@ impl From<&protocol::Lldpdu> for SystemInfo {
             };
 
         SystemInfo {
-            chassis_id: lldpdu.chassis_id.to_string(),
-            port_id: lldpdu.port_id.to_string(),
+            chassis_id: lldpdu.chassis_id.clone(),
+            port_id: lldpdu.port_id.clone(),
             ttl: lldpdu.ttl,
             port_description: lldpdu.port_description.clone(),
             system_name: lldpdu.system_name.clone(),
             system_description: lldpdu.system_description.clone(),
             capabilities_available,
             capabilities_enabled,
-            management_addresses: lldpdu
-                .management_addresses
-                .iter()
-                .map(|ma| ma.to_string())
-                .collect(),
+            management_addresses: lldpdu.management_addresses.to_vec(),
             organizationally_specific: lldpdu
                 .organizationally_specific
                 .iter()
-                .map(|ma| ma.to_string())
+                .map(|os| os.to_string())
                 .collect(),
         }
     }
