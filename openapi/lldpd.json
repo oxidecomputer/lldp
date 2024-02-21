@@ -1285,7 +1285,11 @@
         "properties": {
           "chassis_id": {
             "nullable": true,
-            "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChassisId"
+              }
+            ]
           },
           "port_description": {
             "nullable": true,

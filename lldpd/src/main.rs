@@ -14,8 +14,8 @@
 //   Add optional interface arg to get_neighbors()
 
 use std::collections::BTreeMap;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
+use std::collections::BTreeSet;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -54,7 +54,7 @@ pub struct Global {
     /// List of addresses on which the api_server should listen.
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
     /// List of interfaces we are managing
-    pub interfaces: Mutex<BTreeMap<String, Interface>>,
+    pub interfaces: Mutex<BTreeMap<String, Mutex<Interface>>>,
     /// All of the neighbors we are tracking
     pub neighbors: Mutex<BTreeMap<NeighborId, Neighbor>>,
 }
@@ -84,8 +84,7 @@ pub struct SwitchInfo {
     pub chassis_id: String,
     pub system_name: String,
     pub system_description: String,
-    pub ipv4: Vec<Ipv4Addr>,
-    pub ipv6: Vec<Ipv6Addr>,
+    pub management_addrs: BTreeSet<IpAddr>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -193,8 +192,7 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
             Some(d) => d.to_string(),
             None => format!("{} {}", get_uname("-o"), get_uname("-m")),
         },
-        ipv4: Vec::new(),
-        ipv6: Vec::new(),
+        management_addrs: BTreeSet::new(),
     }
 }
 

@@ -88,7 +88,9 @@ enum IfaceDelProp {
 
 #[derive(Debug, StructOpt)]
 enum IfaceProp {
+    /// Set an interface-level property
     Set(IfaceSetProp),
+    /// Delete an interface-level property
     Del(IfaceDelProp),
 }
 
@@ -182,7 +184,9 @@ enum SystemDelProp {
 
 #[derive(Debug, StructOpt)]
 enum SystemProp {
+    /// Set a system level property
     Set(SystemSetProp),
+    /// Delete a system level property
     Del(SystemDelProp),
 }
 
@@ -217,7 +221,7 @@ enum Commands {
     /// interface level with per-interface settings.
     #[structopt(visible_alias = "sys")]
     System(System),
-    /// Manage the interfaces on which we are listening and transmitting
+    /// Manage interface population and properties.
     #[structopt(visible_alias = "iface")]
     Interface(Interface),
     /// Get the neighbors the daemon has seen
@@ -467,6 +471,9 @@ async fn main() -> anyhow::Result<()> {
                 port_description,
                 iface,
             } => {
+                // TODO-completeness: allow for other types of chassis ID
+                let chassis_id =
+                    chassis_id.map(|c| types::ChassisId::ChassisComponent(c));
                 let add_args = types::InterfaceAdd {
                     chassis_id,
                     port_id,

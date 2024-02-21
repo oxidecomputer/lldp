@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
+use std::net::IpAddr;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -13,6 +13,7 @@ use slog::info;
 use slog::trace;
 use slog::warn;
 use tokio::process::Command;
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
 use crate::packet::LldpTlv;
@@ -28,23 +29,34 @@ const DLADM: &str = "/usr/sbin/dladm";
 // By default, we set an LLDPDUs TTL to 120 seconds.
 const DEFAULT_TTL: u16 = 120;
 
+#[derive(Debug)]
 pub struct Interface {
     /// Name of the interface on which LLDPDUs are sent and received.
     /// For sidecar ports, this will be the tfport.
     pub iface: String,
     pub mac: MacAddr,
 
-    pub chassis_id: Option<String>,
+    pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: Option<String>,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
 
-    pub ipv4: Option<Vec<Ipv4Addr>>,
-    pub ipv6: Option<Vec<Ipv6Addr>>,
+    pub management_addrs: Option<BTreeSet<IpAddr>>,
 
-    exit_tx: oneshot::Sender<()>,
+    done_tx: mpsc::Sender<()>,
+}
+
+macro_rules! get_interface {
+    ($hash:ident, $name:ident) => {
+        $hash
+            .get($name)
+            .ok_or_else(|| {
+                LldpdError::Missing(format!("no such interface: {}", $name))
+            })
+            .map(|i| i.lock().unwrap())
+    };
 }
 
 // Get a BTreeMap containing the names and types of all links on the system
@@ -166,18 +178,13 @@ pub fn build_lldpdu(
     let enabled = avail.clone();
 
     let mut management_addresses = Vec::new();
-    let ipv4_addrs = iface.ipv4.as_ref().unwrap_or_else(|| &switchinfo.ipv4);
-    for ipv4 in ipv4_addrs {
+    let addrs = iface
+        .management_addrs
+        .as_ref()
+        .unwrap_or_else(|| &switchinfo.management_addrs);
+    for addr in addrs {
         management_addresses.push(protocol::ManagementAddress {
-            addr: (*ipv4).into(),
-            interface_num: protocol::InterfaceNum::Unknown(0),
-            oid: None,
-        });
-    }
-    let ipv6_addrs = iface.ipv6.as_ref().unwrap_or_else(|| &switchinfo.ipv6);
-    for ipv6 in ipv6_addrs {
-        management_addresses.push(protocol::ManagementAddress {
-            addr: (*ipv6).into(),
+            addr: *addr,
             interface_num: protocol::InterfaceNum::Unknown(0),
             oid: None,
         });
@@ -202,8 +209,9 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
     let Some(iface) = iface_hash.get(name) else {
         return Ok(None);
     };
+    let iface = iface.lock().unwrap();
 
-    let lldpdu = build_lldpdu(&switchinfo, name, iface);
+    let lldpdu = build_lldpdu(&switchinfo, name, &iface);
     let tlvs: Vec<LldpTlv> = (&lldpdu).try_into()?;
 
     let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
@@ -228,19 +236,23 @@ fn try_add(
         return Err(LldpdError::Exists("interface already added".into()));
     }
     if let Some(i) = interface {
-        iface_hash.insert(name.to_string(), i);
+        iface_hash.insert(name.to_string(), Mutex::new(i));
     }
     Ok(())
 }
 
 fn interface_remove(g: &Global, name: &str) {
     let mut iface_hash = g.interfaces.lock().unwrap();
-    if let Some(i) = iface_hash.remove(name) {
-        info!(&g.log, "removed {name} from interface hash");
-        let _ = i.exit_tx.send(());
-    } else {
-        error!(&g.log, "unable to remove interface: not in interface hash";
+    match iface_hash.remove(name) {
+        Some(i) => {
+            info!(&g.log, "removed {name} from interface hash");
+            let i = i.lock().unwrap();
+            let _ = &i.done_tx.send(());
+        }
+        None => {
+            error!(&g.log, "unable to remove interface: not in interface hash";
 	    "port" => name);
+        }
     }
 }
 
@@ -297,7 +309,7 @@ async fn interface_loop(
     g: Arc<Global>,
     name: String,
     iface: String,
-    mut done: oneshot::Receiver<()>,
+    mut done_rx: mpsc::Receiver<()>,
 ) {
     let log = g.log.new(slog::o!(
 	"port" => name.to_string(),
@@ -324,7 +336,8 @@ async fn interface_loop(
     ));
 
     let mut next_xmit = Instant::now();
-    loop {
+    let mut done = false;
+    while !done {
         if Instant::now() > next_xmit {
             match build_lldpdu_packet(&g, &name) {
                 Err(e) => {
@@ -355,7 +368,7 @@ async fn interface_loop(
         };
 
         tokio::select! {
-               _= &mut done => { break}
+               _= done_rx.recv() => { done = true}
           _ = tokio::time::sleep(delay) => {}
         };
     }
@@ -398,7 +411,7 @@ async fn get_iface_mac(
 pub async fn interface_add(
     global: &Arc<Global>,
     name: String,
-    chassis_id: Option<String>,
+    chassis_id: Option<protocol::ChassisId>,
     port_id: Option<String>,
     ttl: Option<u16>,
     system_name: Option<String>,
@@ -410,7 +423,7 @@ pub async fn interface_add(
 
     let (iface, mac) = get_iface_mac(global, &name).await?;
 
-    let (exit_tx, exit_rx) = oneshot::channel();
+    let (done_tx, done_rx) = mpsc::channel(1);
     let interface = Interface {
         iface: iface.clone(),
         mac,
@@ -420,15 +433,92 @@ pub async fn interface_add(
         system_name,
         system_description,
         port_description,
-        ipv4: None,
-        ipv6: None,
-        exit_tx,
+        management_addrs: None,
+        done_tx,
     };
 
     try_add(global, &name, Some(interface))?;
     let global = global.clone();
     let _hdl = tokio::task::spawn(async move {
-        interface_loop(global, name, iface, exit_rx).await
+        interface_loop(global, name, iface, done_rx).await
     });
+    Ok(())
+}
+
+/// Add a single management addresses to an interface.
+pub fn addr_add(g: &Global, name: &String, addr: &IpAddr) -> LldpdResult<()> {
+    info!(g.log, "adding management address";
+	    "iface" => name, "addr" => addr.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+
+    if iface.management_addrs.is_none() {
+        iface.management_addrs = Some(BTreeSet::new());
+    }
+    iface
+        .management_addrs
+        .as_mut()
+        .expect("existence guaranteed above")
+        .insert(*addr);
+    Ok(())
+}
+
+/// Set the interface-local chassis id
+pub fn chassis_id_set(
+    g: &Global,
+    name: &String,
+    chassis_id: protocol::ChassisId,
+) -> LldpdResult<()> {
+    info!(g.log, "setting interface-level chassis ID";
+	    "iface" => name, "chassis_id" => chassis_id.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+
+    if iface.chassis_id.is_some() {
+        debug!(g.log, "replacing existing chassis ID"; "iface" => name);
+    }
+    iface.chassis_id = Some(chassis_id);
+    Ok(())
+}
+
+/// Clearing the interface-local chassis id
+pub fn chassis_id_del(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "clearing interface-level chassis ID"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.chassis_id = None;
+    Ok(())
+}
+
+/// Remove a single management addresses from an interface.
+pub fn addr_delete(
+    g: &Global,
+    name: &String,
+    addr: &IpAddr,
+) -> LldpdResult<()> {
+    info!(g.log, "removing management address";
+	    "iface" => name, "addr" => addr.to_string());
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+
+    if let Some(addrs) = &mut iface.management_addrs {
+        if addrs.remove(&addr) {
+            Ok(())
+        } else {
+            Err(LldpdError::Missing(format!("no such address: {addr}")))
+        }
+    } else {
+        Err(LldpdError::Missing(
+            "no interface-local addresses".to_string(),
+        ))
+    }
+}
+
+/// Remove all management addresses on an interface.
+pub fn addr_delete_all(g: &Global, name: &String) -> LldpdResult<()> {
+    info!(g.log, "removing all management addresses"; "iface" => name);
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)?;
+    iface.management_addrs = None;
     Ok(())
 }

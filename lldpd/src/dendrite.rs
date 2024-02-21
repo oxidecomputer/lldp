@@ -66,6 +66,7 @@ pub async fn dpd_init(
     log: &slog::Logger,
     opts: crate::Opt,
 ) -> Option<dpd_client::Client> {
+    info!(log, "opts: {opts:#?}");
     if opts.no_dpd {
         None
     } else {

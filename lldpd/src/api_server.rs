@@ -284,7 +284,7 @@ pub struct Interface {
 /// unspecified will be assigned the default values for this system.
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct InterfaceAdd {
-    pub chassis_id: Option<String>,
+    pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: Option<String>,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
@@ -354,15 +354,18 @@ async fn interface_list(
             .lock()
             .unwrap()
             .iter()
-            .map(|(name, iface)| Interface {
-                port: name.clone(),
-                iface: iface.iface.clone(),
-                system_info: (&interfaces::build_lldpdu(
-                    &switchinfo,
-                    name,
-                    iface,
-                ))
-                    .into(),
+            .map(|(name, iface)| {
+                let i = iface.lock().unwrap();
+                Interface {
+                    port: name.clone(),
+                    iface: i.iface.clone(),
+                    system_info: (&interfaces::build_lldpdu(
+                        &switchinfo,
+                        name,
+                        &i,
+                    ))
+                        .into(),
+                }
             })
             .collect(),
     ))
@@ -380,8 +383,9 @@ async fn interface_set_chassis_id(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     let val = body.into_inner();
-    debug!(global.log, "set chassis_id = {:?} on {}", val, inner.iface);
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::chassis_id_set(global, &inner.iface, val)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -394,8 +398,9 @@ async fn interface_del_chassis_id(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "delete chassis_id on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::chassis_id_del(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -646,11 +651,9 @@ async fn interface_add_management_addr(
 ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(
-        global.log,
-        "add management address {} on {}", inner.address, inner.iface
-    );
-    Ok(HttpResponseUpdatedNoContent())
+    interfaces::addr_add(global, &inner.iface, &inner.address)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -663,11 +666,9 @@ async fn interface_del_management_addr(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(
-        global.log,
-        "clear management address {} on {}", inner.address, inner.iface
-    );
-    Ok(HttpResponseDeleted())
+    interfaces::addr_delete(global, &inner.iface, &inner.address)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -680,8 +681,9 @@ async fn interface_clear_management_addr(
 ) -> Result<HttpResponseDeleted, HttpError> {
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
-    debug!(global.log, "clear management addresses on {}", inner.iface);
-    Ok(HttpResponseDeleted())
+    interfaces::addr_delete_all(global, &inner.iface)
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseDeleted())
 }
 
 /// A remote system that has been discovered on one of our configured interfaces
