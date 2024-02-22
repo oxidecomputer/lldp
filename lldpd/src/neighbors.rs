@@ -3,7 +3,9 @@ use std::collections::btree_map::Entry;
 use chrono::DateTime;
 use chrono::Utc;
 use slog::info;
+use slog::trace;
 
+use crate::interfaces;
 use crate::protocol;
 use crate::protocol::Lldpdu;
 use crate::types;
@@ -35,9 +37,9 @@ impl Neighbor {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NeighborId {
-    interface: String,
-    chassis_id: protocol::ChassisId,
-    port_id: protocol::PortId,
+    pub interface: String,
+    pub chassis_id: protocol::ChassisId,
+    pub port_id: protocol::PortId,
 }
 
 impl NeighborId {
@@ -52,6 +54,10 @@ impl NeighborId {
 
 pub fn incoming_lldpdu(g: &Global, interface: &str, lldpdu: Lldpdu) {
     let id = NeighborId::new(interface, &lldpdu);
+    if interfaces::neighbor_id_match(g, &id) {
+        trace!(g.log, "ignoring our own lldpdu for {id:?}");
+        return;
+    }
     let mut neighbors = g.neighbors.lock().unwrap();
     match neighbors.entry(id.clone()) {
         Entry::Vacant(e) => {

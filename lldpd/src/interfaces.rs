@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -12,10 +11,10 @@ use slog::error;
 use slog::info;
 use slog::trace;
 use slog::warn;
-use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
+use crate::neighbors;
 use crate::packet::LldpTlv;
 use crate::packet::Packet;
 use crate::protocol;
@@ -25,7 +24,6 @@ use crate::Global;
 use common::MacAddr;
 use protocol::Lldpdu;
 
-const DLADM: &str = "/usr/sbin/dladm";
 // By default, we set an LLDPDUs TTL to 120 seconds.
 const DEFAULT_TTL: u16 = 120;
 
@@ -37,7 +35,7 @@ pub struct Interface {
     pub mac: MacAddr,
 
     pub chassis_id: Option<protocol::ChassisId>,
-    pub port_id: Option<protocol::PortId>,
+    pub port_id: protocol::PortId,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
@@ -59,71 +57,133 @@ macro_rules! get_interface {
     };
 }
 
-// Get a BTreeMap containing the names and types of all links on the system
-async fn get_links() -> LldpdResult<BTreeMap<String, String>> {
-    // When we run dladm with no arguments, we get a list of all links on
-    // the system.  The first field is the link name and the second is the
-    // link type
-    let out = Command::new(DLADM).output().await?;
-    if !out.status.success() {
-        return Err(LldpdError::Other(format!(
-            "dladm failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        )));
-    }
+#[cfg(target_os = "linux")]
+mod plat {
+    use crate::types::LldpdError;
+    use crate::types::LldpdResult;
+    use crate::Global;
+    use common::MacAddr;
 
-    let mut rval = BTreeMap::new();
-    let mut idx = 0;
-    for line in std::str::from_utf8(&out.stdout)
-        .map_err(|e| {
-            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-        })?
-        .lines()
-    {
-        idx += 1;
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        if fields.len() < 2 {
-            return Err(LldpdError::Other("invalid dladm output".to_string()));
+    pub async fn get_iface_and_mac(
+        _g: &Global,
+        name: &str,
+    ) -> LldpdResult<(String, MacAddr)> {
+        let addr_file = format!("/sys/class/net/{name}/address");
+        let mac = std::fs::read_to_string(addr_file)?;
+        Ok((
+            name.to_string(),
+            mac.trim().parse().map_err(|e| {
+                LldpdError::Other(format!(
+                    "failed to parse mac address {mac}: {e:?}"
+                ))
+            })?,
+        ))
+    }
+}
+
+#[cfg(target_os = "illumos")]
+mod plat {
+    use std::collections::BTreeMap;
+    use tokio::process::Command;
+
+    use crate::types::LldpdError;
+    use crate::types::LldpdResult;
+    use crate::Global;
+    use common::MacAddr;
+
+    const DLADM: &str = "/usr/sbin/dladm";
+
+    // Get a BTreeMap containing the names and types of all links on the system
+    async fn get_links() -> LldpdResult<BTreeMap<String, String>> {
+        // When we run dladm with no arguments, we get a list of all links on
+        // the system.  The first field is the link name and the second is the
+        // link type
+        let out = Command::new(DLADM).output().await?;
+        if !out.status.success() {
+            return Err(LldpdError::Other(format!(
+                "dladm failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            )));
         }
-        if idx > 0 {
-            rval.insert(fields[0].to_string(), fields[1].to_string());
+
+        let mut rval = BTreeMap::new();
+        let mut idx = 0;
+        for line in std::str::from_utf8(&out.stdout)
+            .map_err(|e| {
+                LldpdError::Other(format!("while reading dladm outout: {e:?}"))
+            })?
+            .lines()
+        {
+            idx += 1;
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() < 2 {
+                return Err(LldpdError::Other(
+                    "invalid dladm output".to_string(),
+                ));
+            }
+            if idx > 0 {
+                rval.insert(fields[0].to_string(), fields[1].to_string());
+            }
+        }
+        Ok(rval)
+    }
+
+    async fn get_mac(dladm_args: Vec<&str>) -> LldpdResult<MacAddr> {
+        let out = Command::new(DLADM).args(dladm_args).output().await?;
+        if !out.status.success() {
+            return Err(LldpdError::Other(format!(
+                "dladm failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
+        let lines: Vec<&str> = std::str::from_utf8(&out.stdout)
+            .map_err(|e| {
+                LldpdError::Other(format!("while reading dladm outout: {e:?}"))
+            })?
+            .lines()
+            .collect();
+        if lines.len() == 1 {
+            let mac = lines[0];
+            mac.parse::<MacAddr>().map_err(|e| {
+                LldpdError::Other(format!(
+                    "failed to parse mac address {mac}: {e:?}"
+                ))
+            })
+        } else {
+            Err(LldpdError::Other("invalid dladm output".to_string()))
         }
     }
-    Ok(rval)
-}
 
-async fn get_mac(dladm_args: Vec<&str>) -> LldpdResult<MacAddr> {
-    let out = Command::new(DLADM).args(dladm_args).output().await?;
-    if !out.status.success() {
-        return Err(LldpdError::Other(format!(
-            "dladm failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        )));
+    #[allow(unused_variables)]
+    pub async fn get_iface_and_mac(
+        g: &Global,
+        name: &str,
+    ) -> LldpdResult<(String, MacAddr)> {
+        #[cfg(feature = "dendrite")]
+        if name.contains('/') {
+            return crate::dendrite::dpd_tfport(g, name).await;
+        }
+
+        let links = get_links().await?;
+        let iface = name.to_string();
+        let mac = match links.get(name).map(|t| t.as_str()) {
+            Some("phys") => {
+                get_mac(vec!["show-phys", "-p", "-o", "address", "-m", name])
+                    .await
+            }
+            Some("vnic") => {
+                get_mac(vec!["show-vnic", "-p", "-o", "macaddress", name]).await
+            }
+            Some("tfport") => Err(LldpdError::Invalid(
+                "cannot use LLDP with a tfport - use the sidecar link".into(),
+            )),
+            Some(x) => Err(LldpdError::Invalid(format!(
+                "cannot use LLDP on {x} links"
+            ))),
+            None => Err(LldpdError::Missing("no such link".into())),
+        }?;
+        Ok((iface, mac))
     }
-    let lines: Vec<&str> = std::str::from_utf8(&out.stdout)
-        .map_err(|e| {
-            LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-        })?
-        .lines()
-        .collect();
-    if lines.len() == 1 {
-        let mac = lines[0];
-        mac.parse::<MacAddr>().map_err(|e| {
-            LldpdError::Other(format!(
-                "failed to parse mac address {mac}: {e:?}"
-            ))
-        })
-    } else {
-        Err(LldpdError::Other("invalid dladm output".to_string()))
-    }
-}
-
-async fn get_mac_phys(link: &str) -> LldpdResult<MacAddr> {
-    get_mac(vec!["show-phys", "-p", "-o", "address", "-m", link]).await
-}
-
-async fn get_mac_vnic(link: &str) -> LldpdResult<MacAddr> {
-    get_mac(vec!["show-vnic", "-p", "-o", "macaddress", link]).await
 }
 
 fn pcap_open(iface: &str) -> anyhow::Result<pcap::Pcap> {
@@ -161,16 +221,11 @@ fn pcap_open_duplex(iface: &str) -> LldpdResult<(pcap::Pcap, pcap::Pcap)> {
 
 pub fn build_lldpdu(
     switchinfo: &crate::SwitchInfo,
-    name: &str,
     iface: &Interface,
 ) -> Lldpdu {
     let chassis_id = match &iface.chassis_id {
         Some(c) => c.clone(),
         None => switchinfo.chassis_id.clone(),
-    };
-    let port_id = match &iface.port_id {
-        Some(p) => p.clone(),
-        None => protocol::PortId::InterfaceName(name.to_string()),
     };
 
     let mut avail = BTreeSet::new();
@@ -200,7 +255,7 @@ pub fn build_lldpdu(
     };
     Lldpdu {
         chassis_id,
-        port_id,
+        port_id: iface.port_id.clone(),
         ttl: iface.ttl.unwrap_or(DEFAULT_TTL),
         system_capabilities: Some((avail, enabled)),
         port_description: iface.port_description.clone(),
@@ -219,7 +274,7 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
     };
     let iface = iface.lock().unwrap();
 
-    let lldpdu = build_lldpdu(&switchinfo, name, &iface);
+    let lldpdu = build_lldpdu(&switchinfo, &iface);
     let tlvs: Vec<LldpTlv> = (&lldpdu).try_into()?;
 
     let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
@@ -389,30 +444,18 @@ async fn interface_loop(
     interface_remove(&g, &name);
 }
 
-#[allow(unused_variables)]
-async fn get_iface_mac(
-    g: &Global,
-    name: &str,
-) -> LldpdResult<(String, MacAddr)> {
-    #[cfg(feature = "dendrite")]
-    if name.contains('/') {
-        return crate::dendrite::dpd_tfport(g, name).await;
-    }
-
-    let links = get_links().await?;
-    let iface = name.to_string();
-    let mac = match links.get(name).map(|t| t.as_str()) {
-        Some("phys") => get_mac_phys(name).await,
-        Some("vnic") => get_mac_vnic(name).await,
-        Some("tfport") => Err(LldpdError::Invalid(
-            "cannot use LLDP with a tfport - use the sidecar link".into(),
-        )),
-        Some(x) => {
-            Err(LldpdError::Invalid(format!("cannot use LLDP on {x} links")))
-        }
-        None => Err(LldpdError::Missing("no such link".into())),
-    }?;
-    Ok((iface, mac))
+pub fn neighbor_id_match(g: &Global, id: &neighbors::NeighborId) -> bool {
+    let chassis_id = g.switchinfo.lock().unwrap().chassis_id.clone();
+    g.interfaces
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(name, _iface)| name == &&id.interface)
+        .any(|(_name, iface)| {
+            let iface = iface.lock().unwrap();
+            let chassis_id = iface.chassis_id.as_ref().unwrap_or(&chassis_id);
+            id.port_id == iface.port_id && &id.chassis_id == chassis_id
+        })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -429,8 +472,10 @@ pub async fn interface_add(
     info!(&global.log, "Adding interface"; "name" => name.to_string());
     try_add(global, &name, None)?;
 
-    let (iface, mac) = get_iface_mac(global, &name).await?;
+    let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
 
+    let port_id =
+        port_id.unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
     let (done_tx, done_rx) = mpsc::channel(1);
     let interface = Interface {
         iface: iface.clone(),
@@ -504,16 +549,7 @@ pub fn port_id_set(
 	    "iface" => name, "port_id" => port_id.to_string());
     let iface_hash = g.interfaces.lock().unwrap();
     let mut iface = get_interface!(iface_hash, name)?;
-    iface.port_id = Some(port_id);
-    Ok(())
-}
-
-/// Clearing the port id
-pub fn port_id_del(g: &Global, name: &String) -> LldpdResult<()> {
-    info!(g.log, "clearing port ID"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.port_id = None;
+    iface.port_id = port_id;
     Ok(())
 }
 

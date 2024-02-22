@@ -366,11 +366,7 @@ async fn interface_get(
                 Interface {
                     port: interface.clone(),
                     iface: i.iface.clone(),
-                    system_info: (&interfaces::build_lldpdu(
-                        &switchinfo,
-                        &interface,
-                        &i,
-                    ))
+                    system_info: (&interfaces::build_lldpdu(&switchinfo, &i))
                         .into(),
                 }
             })?,
@@ -397,11 +393,7 @@ async fn interface_list(
                 Interface {
                     port: name.clone(),
                     iface: i.iface.clone(),
-                    system_info: (&interfaces::build_lldpdu(
-                        &switchinfo,
-                        name,
-                        &i,
-                    ))
+                    system_info: (&interfaces::build_lldpdu(&switchinfo, &i))
                         .into(),
                 }
             })
@@ -456,21 +448,6 @@ async fn interface_set_port_id(
     interfaces::port_id_set(global, &inner.iface, val)
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
-}
-
-#[endpoint {
-    method = DELETE,
-    path = "/interface/{iface}/port_id",
-}]
-async fn interface_del_port_id(
-    rqctx: RequestContext<Arc<Global>>,
-    path: Path<InterfacePathParams>,
-) -> Result<HttpResponseDeleted, HttpError> {
-    let global: &Global = rqctx.context();
-    let inner = path.into_inner();
-    interfaces::port_id_del(global, &inner.iface)
-        .map_err(|e| e.into())
-        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -916,7 +893,6 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     api.register(interface_get).unwrap();
     api.register(interface_set_chassis_id).unwrap();
     api.register(interface_del_chassis_id).unwrap();
-    api.register(interface_del_port_id).unwrap();
     api.register(interface_set_port_id).unwrap();
     api.register(interface_del_ttl).unwrap();
     api.register(interface_set_ttl).unwrap();

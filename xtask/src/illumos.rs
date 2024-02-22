@@ -94,6 +94,19 @@ fn illumos_package() -> Result<()> {
     }
 }
 
+fn project_root() -> Result<String> {
+    match Path::new(&std::env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(1)
+        .unwrap()
+        .to_path_buf()
+        .to_str()
+    {
+        Some(p) => Ok(p.to_string()),
+        _ => Err(anyhow!("bad path")),
+    }
+}
+
 // Build a package suitable for omicron-package to bundle into a switch zone
 async fn omicron_package() -> Result<()> {
     let manifest_file = "lldp-manifest.toml";

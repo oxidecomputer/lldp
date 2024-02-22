@@ -2,11 +2,11 @@
 name = "lldpd"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [features]
-default = ["dendrite", "smf"]
-dendrite = []
-smf = []
+dendrite = [ "dep:dpd-client" ]
+smf = [ "dep:crucible-smf" ]
 
 [dependencies]
 pcap.workspace = true
@@ -24,8 +24,14 @@ structopt.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
-dpd-client.workspace = true
-crucible-smf.workspace = true
+[dependencies.dpd-client]
+path = "../dpd-client"
+optional = true
+
+[dependencies.crucible-smf]
+git = "https://github.com/oxidecomputer/crucible"
+rev = "9bcd80c3392d2f0128ef1ac5aa13036d268a8e8e"
+optional = true
 
 [build-dependencies]
 anyhow.workspace = true

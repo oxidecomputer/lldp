@@ -2,12 +2,10 @@
 name = "common"
 version = "0.1.0"
 authors = ["Nils Nieuwejaar <nils@oxide.computer>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow.workspace = true
-chrono.workspace = true
-rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true

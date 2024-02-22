@@ -82,6 +82,7 @@ impl TryFrom<&Lldpdu> for Vec<LldpTlv> {
         for os in &lldpdu.organizationally_specific {
             lldp_data.push(os.try_into()?)
         }
+        lldp_data.push(LldpTlv::new(TlvType::EndOfLLDPDU as u8, &[0u8; 0])?);
 
         Ok(lldp_data)
     }

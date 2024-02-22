@@ -3,15 +3,12 @@ name = "lldpadm"
 description = "Management CLI for the Oxide LLDP daemon"
 version = "0.1.0"
 authors = ["nils <nils@oxide.computer>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-colored.workspace = true
 lldpd-client.workspace = true
-futures.workspace = true
 structopt.workspace = true
 slog.workspace = true
-tabwriter.workspace = true
 tokio.workspace = true

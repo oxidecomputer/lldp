@@ -84,19 +84,6 @@ fn collect<T: ToString>(src: &str, dst: &str, files: Vec<T>) -> Result<()> {
     Ok(())
 }
 
-fn project_root() -> Result<String> {
-    match Path::new(&std::env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(1)
-        .unwrap()
-        .to_path_buf()
-        .to_str()
-    {
-        Some(p) => Ok(p.to_string()),
-        _ => Err(anyhow!("bad path")),
-    }
-}
-
 fn collect_binaries(release: bool, dst: &str) -> Result<()> {
     let src = match release {
         true => "./target/release",

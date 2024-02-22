@@ -5,10 +5,7 @@ edition = "2021"
 description = "Client library for the Dendrite data plane daemon"
 
 [dependencies]
-async-trait = "0.1.68"
-http.workspace = true
 futures.workspace = true
-regress = "0.7"
 reqwest.workspace = true
 schemars.workspace = true
 serde.workspace = true
@@ -18,10 +15,3 @@ tokio = { workspace = true, features = [ "full" ] }
 
 common.workspace = true
 progenitor.workspace = true
-
-[dev-dependencies]
-anyhow.workspace = true
-rand.workspace = true
-slog.workspace = true
-slog-async.workspace = true
-slog-term.workspace = true
