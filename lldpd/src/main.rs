@@ -218,9 +218,10 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     }
 
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
-    let api_server_manager = tokio::task::spawn(
-        api_server::api_server_manager(global.clone(), api_rx.clone()),
-    );
+    let api_global = global.clone();
+    let api_server_manager = tokio::task::spawn(async move {
+        api_server::api_server_manager(api_global, api_rx).await
+    });
 
     signal_handler(global.clone(), api_tx);
 

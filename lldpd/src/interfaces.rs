@@ -345,45 +345,6 @@ fn handle_packet(g: &Global, name: &str, data: &[u8]) {
     }
 }
 
-async fn interface_recv_loop(
-    g: Arc<Global>,
-    name: String,
-    iface: String,
-    pcap: pcap::Pcap,
-    done: oneshot::Receiver<()>,
-) {
-    let fd = pcap.raw_fd();
-    let asyncfd = match tokio::io::unix::AsyncFd::new(fd) {
-        Ok(f) => f,
-        Err(e) => {
-            error!(g.log, "failed to wrap pcap fd for tokio: {e:?}");
-            return;
-        }
-    };
-
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-            debug!(g.log, "timeout");
-            continue;
-        }
-          };
-        match pcap.next() {
-            Ok(None) => {
-                debug!(g.log, "no data");
-                break;
-            }
-            Ok(Some(data)) => handle_packet(&g, &name, data),
-            Err(e) => {
-                error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
-                break;
-            }
-        }
-    }
-    pcap.close();
-    let _ = done.await;
-}
-
 async fn interface_loop(
     g: Arc<Global>,
     name: String,
@@ -467,8 +428,6 @@ async fn interface_loop(
         }
     }
 
-    // Shut down the receive loop
-    debug!(log, "shutting down receive loop");
     debug!(log, "interface loop shutting down");
     interface_remove(&g, &name);
 }
