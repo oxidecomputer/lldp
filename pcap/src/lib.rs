@@ -110,7 +110,6 @@ impl Pcap {
             let mut err = [0i8; PCAP_ERRBUF_SIZE];
             let fd = ffi::pcap_get_selectable_fd(self.lib_hdl);
             if fd >= 0 {
-                ffi::pcap_setnonblock(self.lib_hdl, 1, err.as_mut_ptr());
                 self.raw_fd = fd;
             }
         }
@@ -205,17 +204,6 @@ impl Pcap {
         // all systems since even pcap_setnonblock() also doesn't seem reliable
         // everywhere.  Sigh.
         loop {
-            if self.raw_fd >= 0 {
-                let rval = unsafe { ffi::block_on(self.raw_fd, 100, 50000) };
-                if rval < 0 {
-                    return Err(PcapError::Poll(rval));
-                }
-                let _lock = self.lock.lock();
-                if !self.activated {
-                    return Err(PcapError::Closed);
-                }
-            }
-
             match self.fetch() {
                 Err(e) => return Err(e),
                 Ok(None) => return Ok(None),
@@ -280,6 +268,10 @@ impl Pcap {
         }
         .error_check(self.lib_hdl)
         .map(|_| bpf)
+    }
+
+    pub fn raw_fd(&self) -> i32 {
+        self.raw_fd
     }
 }
 

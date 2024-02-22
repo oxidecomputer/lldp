@@ -352,9 +352,27 @@ async fn interface_recv_loop(
     pcap: pcap::Pcap,
     done: oneshot::Receiver<()>,
 ) {
+    let fd = pcap.raw_fd();
+    let asyncfd = match tokio::io::unix::AsyncFd::new(fd) {
+        Ok(f) => f,
+        Err(e) => {
+            error!(g.log, "failed to wrap pcap fd for tokio: {e:?}");
+            return;
+        }
+    };
+
     loop {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+            debug!(g.log, "timeout");
+            continue;
+        }
+          };
         match pcap.next() {
-            Ok(None) => break,
+            Ok(None) => {
+                debug!(g.log, "no data");
+                break;
+            }
             Ok(Some(data)) => handle_packet(&g, &name, data),
             Err(e) => {
                 error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
@@ -387,14 +405,13 @@ async fn interface_loop(
     };
     debug!(&log, "pcaps open");
 
-    let (exit_tx, exit_rx) = oneshot::channel();
-    let recv_hdl = tokio::task::spawn(interface_recv_loop(
-        g.clone(),
-        name.clone(),
-        iface.clone(),
-        pcap_in,
-        exit_rx,
-    ));
+    let asyncfd = match tokio::io::unix::AsyncFd::new(pcap_in.raw_fd()) {
+        Ok(f) => f,
+        Err(e) => {
+            error!(g.log, "failed to wrap pcap fd for tokio: {e:?}");
+            return;
+        }
+    };
 
     let mut next_xmit = Instant::now();
     let mut done = false;
@@ -428,16 +445,30 @@ async fn interface_loop(
             Duration::from_secs(0)
         };
 
+        let mut do_read = false;
         tokio::select! {
-               _= done_rx.recv() => { done = true}
-          _ = tokio::time::sleep(delay) => {}
+            _= done_rx.recv() => { done = true}
+        _= asyncfd.readable() => { do_read = true}
+        _ = tokio::time::sleep(delay) => {}
         };
+
+        if do_read {
+            match pcap_in.next() {
+                Ok(None) => {
+                    debug!(g.log, "no data");
+                    break;
+                }
+                Ok(Some(data)) => handle_packet(&g, &name, data),
+                Err(e) => {
+                    error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
+                    break;
+                }
+            }
+        }
     }
+
     // Shut down the receive loop
     debug!(log, "shutting down receive loop");
-    let _ = exit_tx.send(());
-    debug!(log, "waiting for receive loop to exit");
-    let _ = tokio::join!(recv_hdl);
     debug!(log, "interface loop shutting down");
     interface_remove(&g, &name);
 }
