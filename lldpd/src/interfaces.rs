@@ -354,14 +354,12 @@ async fn interface_recv_loop(
 ) {
     loop {
         match pcap.next() {
-            pcap::Ternary::None => {
-                break;
-            }
-            pcap::Ternary::Err(e) => {
+            Ok(None) => break,
+            Ok(Some(data)) => handle_packet(&g, &name, data),
+            Err(e) => {
                 error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
                 break;
             }
-            pcap::Ternary::Ok(data) => handle_packet(&g, &name, data),
         }
     }
     pcap.close();

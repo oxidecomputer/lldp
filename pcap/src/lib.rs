@@ -4,6 +4,26 @@ use std::sync::Mutex;
 
 mod ffi;
 
+pub type PcapResult<T> = Result<T, PcapError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum PcapError {
+    /// The daemon attempted to perform a task the required contacting dpd without
+    /// being connected to a dpd instance.
+    #[error("Not connected to dpd daemon")]
+    NoDpd,
+    #[error("libpcap error: {0}")]
+    Library(String),
+    #[error("unix error during poll: {0}")]
+    Poll(i32),
+    #[error("handle already activated")]
+    Activated,
+    #[error("handle not yet activated")]
+    NotActivated,
+    #[error("handle closed")]
+    Closed,
+}
+
 pub enum HandleType {
     File,
     Interface,
@@ -43,31 +63,47 @@ impl fmt::Debug for Pcap {
 const PCAP_ERRBUF_SIZE: usize = 256;
 const EMPTY_DATA: [u8; 0] = [];
 
-pub enum Ternary<T, E> {
-    None,
-    Ok(T),
-    Err(E),
+trait PcapErrorCheck {
+    fn error_check(&self, hdl: *mut ffi::pcap) -> PcapResult<i32>;
+}
+
+impl PcapErrorCheck for i32 {
+    fn error_check(&self, hdl: *mut ffi::pcap) -> PcapResult<i32> {
+        // According to the man page, -1 is returned for all errors.
+        // This turns out not be the case.
+        if *self < 0 {
+            Err(get_hdl_error(hdl))
+        } else {
+            Ok(*self)
+        }
+    }
+}
+
+fn get_error_str(ptr: *const i8) -> String {
+    unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+}
+
+fn get_library_error(ptr: *const i8) -> PcapError {
+    PcapError::Library(get_error_str(ptr))
+}
+
+fn get_hdl_error_str(hdl: *mut ffi::pcap) -> String {
+    unsafe { get_error_str(ffi::pcap_geterr(hdl)) }
+}
+
+fn get_hdl_error(hdl: *mut ffi::pcap) -> PcapError {
+    PcapError::Library(get_hdl_error_str(hdl))
 }
 
 impl Pcap {
-    fn get_error(hdl: *mut ffi::pcap) -> String {
-        unsafe {
-            CStr::from_ptr(ffi::pcap_geterr(hdl))
-                .to_string_lossy()
-                .into_owned()
-        }
-    }
-
-    pub fn activate(&mut self) -> Result<(), String> {
+    pub fn activate(&mut self) -> PcapResult<()> {
         let _lock = self.lock.lock();
 
         if self.activated {
-            return Err("already activated".to_string());
+            return Err(PcapError::Activated);
         }
 
-        if unsafe { ffi::pcap_activate(self.lib_hdl) } < 0 {
-            return Err(Pcap::get_error(self.lib_hdl));
-        }
+        unsafe { ffi::pcap_activate(self.lib_hdl).error_check(self.lib_hdl)? };
         self.activated = true;
 
         unsafe {
@@ -106,7 +142,7 @@ impl Pcap {
         cnt: u32,
         callback: fn(&Pcap, &[u8], T),
         cookie: T,
-    ) -> Result<(), String> {
+    ) -> PcapResult<()> {
         let mut packets = 0;
         loop {
             let mut hdr: *mut ffi::pcap_pkthdr = std::ptr::null_mut();
@@ -116,17 +152,12 @@ impl Pcap {
             if !self.activated {
                 break;
             }
-            let x =
-                unsafe { ffi::pcap_next_ex(self.lib_hdl, &mut hdr, &mut data) };
-            if x == -2 {
-                // -2 means a clean shutdown
-                break;
-            }
-            if x < 0 {
-                // According to the man page, -1 is returned for all errors.
-                // This turns out not be the case.
-                return Err(Pcap::get_error(self.lib_hdl));
-            }
+            match unsafe {
+                ffi::pcap_next_ex(self.lib_hdl, &mut hdr, &mut data)
+            } {
+                -2 => break, // -2 means a clean shutdown
+                x => x.error_check(self.lib_hdl)?,
+            };
 
             let packet;
             unsafe {
@@ -143,28 +174,30 @@ impl Pcap {
         Ok(())
     }
 
-    fn fetch(&self) -> Ternary<&[u8], String> {
+    fn fetch(&self) -> PcapResult<Option<&[u8]>> {
         let mut hdr: *mut ffi::pcap_pkthdr = std::ptr::null_mut();
         let mut data: *const u8 = std::ptr::null_mut();
 
         let _lock = self.lock.lock();
         unsafe {
             match ffi::pcap_next_ex(self.lib_hdl, &mut hdr, &mut data) {
-                -2 => Ternary::None,
-                -1 => Ternary::Err(Pcap::get_error(self.lib_hdl)),
-                0 => Ternary::Ok(&EMPTY_DATA),
+                -2 => Ok(None),
+                -1 => Err(get_hdl_error(self.lib_hdl)),
+                0 => Ok(Some(&EMPTY_DATA)),
                 1 => {
                     let pkt_len = (*hdr).caplen as usize;
                     let s = std::slice::from_raw_parts(data, pkt_len);
-                    Ternary::Ok(s)
+                    Ok(Some(s))
                 }
-                x => Ternary::Err(format!("unexpected rval from pcap: {x}")),
+                x => Err(PcapError::Library(format!(
+                    "unexpected rval from pcap: {x}"
+                ))),
             }
         }
     }
 
     // Block until a packet arrives
-    pub fn next(&self) -> Ternary<&[u8], String> {
+    pub fn next(&self) -> PcapResult<Option<&[u8]>> {
         // This loop is here because libpcap's timeout and breakloop mechanisms
         // don't seem all that reliable, and because closing the pcap handle
         // and/or file descriptor doesn't interrupt a blocked process.
@@ -175,73 +208,59 @@ impl Pcap {
             if self.raw_fd >= 0 {
                 let rval = unsafe { ffi::block_on(self.raw_fd, 100, 50000) };
                 if rval < 0 {
-                    return Ternary::Err(format!(
-                        "unix error during poll: {rval}"
-                    ));
+                    return Err(PcapError::Poll(rval));
                 }
                 let _lock = self.lock.lock();
                 if !self.activated {
-                    return Ternary::Err("pcap closed".to_string());
+                    return Err(PcapError::Closed);
                 }
             }
 
             match self.fetch() {
-                Ternary::None => return Ternary::None,
-                Ternary::Err(e) => return Ternary::Err(e),
-                Ternary::Ok(data) => {
+                Err(e) => return Err(e),
+                Ok(None) => return Ok(None),
+                Ok(Some(data)) => {
                     if !data.is_empty() {
-                        return Ternary::Ok(data);
+                        return Ok(Some(data));
                     }
                 }
             }
         }
     }
 
-    pub fn next_owned(&self) -> Ternary<Vec<u8>, String> {
-        match self.next() {
-            Ternary::None => Ternary::None,
-            Ternary::Err(e) => Ternary::Err(e),
-            Ternary::Ok(data) => Ternary::Ok(data.to_vec()),
-        }
+    pub fn next_owned(&self) -> PcapResult<Option<Vec<u8>>> {
+        self.next().map(|d| d.map(|v| v.to_vec()))
     }
 
     // Send a single packet
-    pub fn send(&self, packet: &[u8]) -> Result<i32, String> {
+    pub fn send(&self, packet: &[u8]) -> PcapResult<i32> {
         let _lock = self.lock.lock();
         if !self.activated {
-            return Err("pcap not activated".to_string());
-        }
-        unsafe {
-            let ptr = packet.as_ptr() as *const core::ffi::c_void;
-            let len = packet.len();
-            let rval = ffi::pcap_inject(self.lib_hdl, ptr, len);
-            if rval < 0 {
-                Err(Pcap::get_error(self.lib_hdl))
-            } else {
-                Ok(rval)
+            Err(PcapError::NotActivated)
+        } else {
+            unsafe {
+                let ptr = packet.as_ptr() as *const core::ffi::c_void;
+                let len = packet.len();
+                ffi::pcap_inject(self.lib_hdl, ptr, len)
+                    .error_check(self.lib_hdl)
             }
         }
     }
 
     // Prior to activating the pcap handle, set the read timeout
-    pub fn set_timeout(&self, ms: i32) -> Result<(), String> {
+    pub fn set_timeout(&self, ms: i32) -> PcapResult<()> {
         let _lock = self.lock.lock();
-        unsafe {
-            if ffi::pcap_set_timeout(self.lib_hdl, ms) < 0 {
-                Err(Pcap::get_error(self.lib_hdl))
-            } else {
-                Ok(())
-            }
-        }
+        unsafe { ffi::pcap_set_timeout(self.lib_hdl, ms) }
+            .error_check(self.lib_hdl)?;
+        Ok(())
     }
 
     // Pass a compiled BPF program to pcap to impose a filter on the packets
     // returned.
-    pub fn set_filter(&self, fp: &mut ffi::bpf_program) -> Result<(), String> {
-        match unsafe { ffi::pcap_setfilter(self.lib_hdl, fp) } {
-            -1 => Err(Pcap::get_error(self.lib_hdl)),
-            _ => Ok(()),
-        }
+    pub fn set_filter(&self, fp: &mut ffi::bpf_program) -> PcapResult<()> {
+        unsafe { ffi::pcap_setfilter(self.lib_hdl, fp) }
+            .error_check(self.lib_hdl)?;
+        Ok(())
     }
 
     // Compile a BPF filter/program from text to BPF code
@@ -249,19 +268,18 @@ impl Pcap {
         &self,
         program: &str,
         netmask: u32,
-    ) -> Result<ffi::bpf_program, String> {
+    ) -> PcapResult<ffi::bpf_program> {
         let mut bpf = ffi::bpf_program {
             bf_len: 0,
             bf_insns: std::ptr::null_mut(),
         };
 
-        match unsafe {
+        unsafe {
             let arg = CString::new(program).expect("CString::new failed");
             ffi::pcap_compile(self.lib_hdl, &mut bpf, arg.as_ptr(), 0, netmask)
-        } {
-            -1 => Err(Pcap::get_error(self.lib_hdl)),
-            _ => Ok(bpf),
         }
+        .error_check(self.lib_hdl)
+        .map(|_| bpf)
     }
 }
 
@@ -270,7 +288,7 @@ impl Pcap {
 ///
 /// If the interface name is `None`, then the return `Pcap` will capture packets
 /// from all interfaces.
-pub fn create(iface: &Option<&str>) -> Result<Pcap, String> {
+pub fn create(iface: &Option<&str>) -> PcapResult<Pcap> {
     // If we're provided an interface name, use it. Otherwise use `"any"` to
     // indicate we want to intercept packets from all interfaces.
     let iface_name = iface.unwrap_or_else(|| "any");
@@ -280,22 +298,22 @@ pub fn create(iface: &Option<&str>) -> Result<Pcap, String> {
     unsafe {
         let lib_hdl = ffi::pcap_create(s.as_ptr(), errbuf.as_mut_ptr());
         if lib_hdl.is_null() {
-            let msg = CStr::from_ptr(&errbuf as *const i8);
-            return Err(msg.to_string_lossy().into_owned());
+            Err(get_library_error(&errbuf as *const i8))
+        } else {
+            Ok(Pcap {
+                htype: HandleType::Interface,
+                name: iface_name.to_string(),
+                activated: false,
+                lib_hdl,
+                raw_fd: -1,
+                lock: Mutex::new(()),
+            })
         }
-        Ok(Pcap {
-            htype: HandleType::Interface,
-            name: iface_name.to_string(),
-            activated: false,
-            lib_hdl,
-            raw_fd: -1,
-            lock: Mutex::new(()),
-        })
     }
 }
 
 // Open a file as a pcap source, and return an opaque handle to the caller.
-pub fn open_offline(name: &str) -> Result<Pcap, String> {
+pub fn open_offline(name: &str) -> PcapResult<Pcap> {
     let filename = CString::new(name).unwrap();
     let mut errbuf = [0i8; PCAP_ERRBUF_SIZE];
 
@@ -303,17 +321,17 @@ pub fn open_offline(name: &str) -> Result<Pcap, String> {
         let cap =
             ffi::pcap_open_offline(filename.as_ptr(), errbuf.as_mut_ptr());
         if cap.is_null() {
-            let msg = CStr::from_ptr(&errbuf as *const i8);
-            return Err(msg.to_string_lossy().into_owned());
+            Err(get_library_error(&errbuf as *const i8))
+        } else {
+            Ok(Pcap {
+                htype: HandleType::File,
+                name: name.to_string(),
+                activated: false,
+                lib_hdl: cap,
+                raw_fd: -1,
+                lock: Mutex::new(()),
+            })
         }
-        Ok(Pcap {
-            htype: HandleType::File,
-            name: name.to_string(),
-            activated: false,
-            lib_hdl: cap,
-            raw_fd: -1,
-            lock: Mutex::new(()),
-        })
     }
 }
 
