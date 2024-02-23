@@ -12,7 +12,6 @@ use slog::info;
 use slog::trace;
 use slog::warn;
 use tokio::sync::mpsc;
-use tokio::sync::oneshot;
 
 use crate::neighbors;
 use crate::packet::LldpTlv;
@@ -407,6 +406,7 @@ async fn interface_loop(
         };
 
         let mut do_read = false;
+        tokio::task::yield_now().await;
         tokio::select! {
             _= done_rx.recv() => { done = true}
         _= asyncfd.readable() => { do_read = true}

@@ -103,16 +103,16 @@ impl Pcap {
             return Err(PcapError::Activated);
         }
 
-        unsafe { ffi::pcap_activate(self.lib_hdl).error_check(self.lib_hdl)? };
-        self.activated = true;
-
         unsafe {
             let mut err = [0i8; PCAP_ERRBUF_SIZE];
+            ffi::pcap_setnonblock(self.lib_hdl, 1, err.as_mut_ptr());
+            ffi::pcap_activate(self.lib_hdl).error_check(self.lib_hdl)?;
             let fd = ffi::pcap_get_selectable_fd(self.lib_hdl);
             if fd >= 0 {
                 self.raw_fd = fd;
             }
         }
+        self.activated = true;
 
         Ok(())
     }
