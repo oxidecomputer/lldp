@@ -26,6 +26,8 @@ use protocol::Lldpdu;
 // By default, we set an LLDPDUs TTL to 120 seconds.
 const DEFAULT_TTL: u16 = 120;
 
+#[cfg(target_os = "illumos")]
+use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
 use crate::plat_linux as plat;
 
@@ -57,111 +59,6 @@ macro_rules! get_interface {
             })
             .map(|i| i.lock().unwrap())
     };
-}
-
-#[cfg(target_os = "illumos")]
-mod plat {
-    use std::collections::BTreeMap;
-    use tokio::process::Command;
-
-    use crate::types::LldpdError;
-    use crate::types::LldpdResult;
-    use crate::Global;
-    use common::MacAddr;
-
-    const DLADM: &str = "/usr/sbin/dladm";
-
-    // Get a BTreeMap containing the names and types of all links on the system
-    async fn get_links() -> LldpdResult<BTreeMap<String, String>> {
-        // When we run dladm with no arguments, we get a list of all links on
-        // the system.  The first field is the link name and the second is the
-        // link type
-        let out = Command::new(DLADM).output().await?;
-        if !out.status.success() {
-            return Err(LldpdError::Other(format!(
-                "dladm failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            )));
-        }
-
-        let mut rval = BTreeMap::new();
-        let mut idx = 0;
-        for line in std::str::from_utf8(&out.stdout)
-            .map_err(|e| {
-                LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-            })?
-            .lines()
-        {
-            idx += 1;
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() < 2 {
-                return Err(LldpdError::Other(
-                    "invalid dladm output".to_string(),
-                ));
-            }
-            if idx > 0 {
-                rval.insert(fields[0].to_string(), fields[1].to_string());
-            }
-        }
-        Ok(rval)
-    }
-
-    async fn get_mac(dladm_args: Vec<&str>) -> LldpdResult<MacAddr> {
-        let out = Command::new(DLADM).args(dladm_args).output().await?;
-        if !out.status.success() {
-            return Err(LldpdError::Other(format!(
-                "dladm failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            )));
-        }
-        let lines: Vec<&str> = std::str::from_utf8(&out.stdout)
-            .map_err(|e| {
-                LldpdError::Other(format!("while reading dladm outout: {e:?}"))
-            })?
-            .lines()
-            .collect();
-        if lines.len() == 1 {
-            let mac = lines[0];
-            mac.parse::<MacAddr>().map_err(|e| {
-                LldpdError::Other(format!(
-                    "failed to parse mac address {mac}: {e:?}"
-                ))
-            })
-        } else {
-            Err(LldpdError::Other("invalid dladm output".to_string()))
-        }
-    }
-
-    #[allow(unused_variables)]
-    pub async fn get_iface_and_mac(
-        g: &Global,
-        name: &str,
-    ) -> LldpdResult<(String, MacAddr)> {
-        #[cfg(feature = "dendrite")]
-        if name.contains('/') {
-            return crate::dendrite::dpd_tfport(g, name).await;
-        }
-
-        let links = get_links().await?;
-        let iface = name.to_string();
-        let mac = match links.get(name).map(|t| t.as_str()) {
-            Some("phys") => {
-                get_mac(vec!["show-phys", "-p", "-o", "address", "-m", name])
-                    .await
-            }
-            Some("vnic") => {
-                get_mac(vec!["show-vnic", "-p", "-o", "macaddress", name]).await
-            }
-            Some("tfport") => Err(LldpdError::Invalid(
-                "cannot use LLDP with a tfport - use the sidecar link".into(),
-            )),
-            Some(x) => Err(LldpdError::Invalid(format!(
-                "cannot use LLDP on {x} links"
-            ))),
-            None => Err(LldpdError::Missing("no such link".into())),
-        }?;
-        Ok((iface, mac))
-    }
 }
 
 pub fn build_lldpdu(
@@ -232,7 +129,7 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
 async fn xmit_lldpdu(
     transport: &plat::Transport,
     packet: Packet,
-) -> LldpdResult<i32> {
+) -> LldpdResult<()> {
     transport
         .packet_send(&packet.deparse())
         .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
@@ -294,6 +191,9 @@ fn handle_packet(g: &Global, name: &str, data: &[u8]) {
     }
 }
 
+// Clippy mistakenly believes that the returns in the map_err code below are
+// unnecessary.  Without those returns, the subsequent unwrap()s would panic.
+#[allow(clippy::needless_return)]
 async fn interface_loop(
     g: Arc<Global>,
     name: String,
@@ -305,24 +205,36 @@ async fn interface_loop(
 	"iface" => iface.to_string()));
     let transport = plat::Transport::new(&iface)
         .map_err(|e| {
-            error!(&log, "failed to open transport"; "err" => e.to_string());
             // TODO: add a "failed" state to interfaces in the hash so the
             // client can retrieve an error message, rather than having them
             // silently disappear
+            error!(&log, "failed to open transport"; "err" => e.to_string());
             return;
         })
         .unwrap();
 
-    let asyncfd = match tokio::io::unix::AsyncFd::new(transport.get_poll_fd()) {
-        Ok(f) => f,
-        Err(e) => {
-            error!(g.log, "failed to wrap transport fd for tokio: {e:?}");
+    let asyncfd = transport
+        .get_poll_fd()
+        .map_err(|e| {
+            error!(g.log, "failed to get transport fd: {e:?}");
             return;
-        }
-    };
+        })
+        .map(|fd| {
+            tokio::io::unix::AsyncFd::new(fd)
+                .map_err(|e| {
+                    error!(
+                        g.log,
+                        "failed to wrap transport fd for tokio: {e:?}"
+                    );
+                    return;
+                })
+                .unwrap()
+        })
+        .unwrap();
 
     let mut next_xmit = Instant::now();
     let mut done = false;
+    let mut buf = [0u8; 2048];
     while !done {
         if Instant::now() > next_xmit {
             match build_lldpdu_packet(&g, &name) {
@@ -336,10 +248,9 @@ async fn interface_loop(
                 }
                 Ok(Some(packet)) => {
                     trace!(&log, "transmit LLDPDU");
-                    match xmit_lldpdu(&transport, packet).await {
-                        Ok(n) => trace!(&log, "sent {n} bytes"),
-                        Err(e) => error!(&log, "failed to xmit lldpdu";
-			    "err" => e.to_string()),
+                    if let Err(e) = xmit_lldpdu(&transport, packet).await {
+                        error!(&log, "failed to xmit lldpdu";
+			    "err" => e.to_string());
                     }
                 }
             }
@@ -362,12 +273,12 @@ async fn interface_loop(
         };
 
         if do_read {
-            match transport.packet_recv() {
+            match transport.packet_recv(&mut buf) {
                 Ok(None) => {
                     debug!(g.log, "no data");
                     break;
                 }
-                Ok(Some(data)) => handle_packet(&g, &name, data),
+                Ok(Some(n)) => handle_packet(&g, &name, &buf[0..n]),
                 Err(e) => {
                     error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
                     break;

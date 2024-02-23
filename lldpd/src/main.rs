@@ -43,8 +43,8 @@ mod dendrite;
 #[cfg(feature = "smf")]
 mod smf;
 
-//#[cfg(target_os = "illumos")]
-//mod plat_illumos;
+#[cfg(target_os = "illumos")]
+mod plat_illumos;
 #[cfg(target_os = "linux")]
 mod plat_linux;
 

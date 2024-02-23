@@ -24,6 +24,9 @@ structopt.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
+[target.'cfg(target_os = "illumos")'.dependencies]
+dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
+
 [dependencies.dpd-client]
 path = "../dpd-client"
 optional = true

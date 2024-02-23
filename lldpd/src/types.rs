@@ -101,7 +101,7 @@ pub enum LldpdError {
     #[error("Pcap error: {0}")]
     Pcap(String),
     #[error("DLPI error: {0}")]
-    DLPI(String),
+    Dlpi(String),
     #[error("error: {0}")]
     Other(String),
 }
@@ -148,7 +148,7 @@ impl convert::From<LldpdError> for dropshot::HttpError {
                 dropshot::HttpError::for_bad_request(None, e)
             }
             LldpdError::Pcap(e) => dropshot::HttpError::for_internal_error(e),
-            LldpdError::DLPI(e) => dropshot::HttpError::for_internal_error(e),
+            LldpdError::Dlpi(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Smf(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Other(e) => dropshot::HttpError::for_internal_error(e),
         }
