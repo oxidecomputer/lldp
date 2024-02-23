@@ -32,15 +32,21 @@ use types::LldpdError;
 use types::LldpdResult;
 
 mod api_server;
-#[cfg(feature = "dendrite")]
-mod dendrite;
 mod interfaces;
 mod neighbors;
 mod packet;
 mod protocol;
+mod types;
+
+#[cfg(feature = "dendrite")]
+mod dendrite;
 #[cfg(feature = "smf")]
 mod smf;
-mod types;
+
+//#[cfg(target_os = "illumos")]
+//mod plat_illumos;
+#[cfg(target_os = "linux")]
+mod plat_linux;
 
 /// All global state for the lldpd daemon
 pub struct Global {

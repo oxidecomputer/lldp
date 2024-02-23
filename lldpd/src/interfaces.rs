@@ -26,6 +26,9 @@ use protocol::Lldpdu;
 // By default, we set an LLDPDUs TTL to 120 seconds.
 const DEFAULT_TTL: u16 = 120;
 
+#[cfg(target_os = "linux")]
+use crate::plat_linux as plat;
+
 #[derive(Debug)]
 pub struct Interface {
     /// Name of the interface on which LLDPDUs are sent and received.
@@ -54,30 +57,6 @@ macro_rules! get_interface {
             })
             .map(|i| i.lock().unwrap())
     };
-}
-
-#[cfg(target_os = "linux")]
-mod plat {
-    use crate::types::LldpdError;
-    use crate::types::LldpdResult;
-    use crate::Global;
-    use common::MacAddr;
-
-    pub async fn get_iface_and_mac(
-        _g: &Global,
-        name: &str,
-    ) -> LldpdResult<(String, MacAddr)> {
-        let addr_file = format!("/sys/class/net/{name}/address");
-        let mac = std::fs::read_to_string(addr_file)?;
-        Ok((
-            name.to_string(),
-            mac.trim().parse().map_err(|e| {
-                LldpdError::Other(format!(
-                    "failed to parse mac address {mac}: {e:?}"
-                ))
-            })?,
-        ))
-    }
 }
 
 #[cfg(target_os = "illumos")]
@@ -185,39 +164,6 @@ mod plat {
     }
 }
 
-fn pcap_open(iface: &str) -> anyhow::Result<pcap::Pcap> {
-    let mut pcap = pcap::create(&Some(iface)).map_err(|e| anyhow!(e))?;
-    pcap.set_timeout(1)
-        .expect("setting the pcap timeout to this constant should never fail");
-    if let Err(e) = pcap.activate() {
-        pcap.close();
-        Err(anyhow!(e))
-    } else {
-        Ok(pcap)
-    }
-}
-
-fn pcap_open_duplex(iface: &str) -> LldpdResult<(pcap::Pcap, pcap::Pcap)> {
-    let pcap_in = match pcap_open(iface) {
-        Ok(i) => i,
-        Err(e) => {
-            return Err(LldpdError::Other(format!(
-                "failed to open inbound pcap: {e:?}"
-            )));
-        }
-    };
-    let pcap_out = match pcap_open(iface) {
-        Ok(o) => o,
-        Err(e) => {
-            pcap_in.close();
-            return Err(LldpdError::Other(format!(
-                "failed to open outbound pcap: {e:?}"
-            )));
-        }
-    };
-    Ok((pcap_in, pcap_out))
-}
-
 pub fn build_lldpdu(
     switchinfo: &crate::SwitchInfo,
     iface: &Interface,
@@ -283,8 +229,12 @@ fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
     Ok(Some(packet))
 }
 
-async fn xmit_lldpdu(pcap: &pcap::Pcap, packet: Packet) -> LldpdResult<i32> {
-    pcap.send(&packet.deparse())
+async fn xmit_lldpdu(
+    transport: &plat::Transport,
+    packet: Packet,
+) -> LldpdResult<i32> {
+    transport
+        .packet_send(&packet.deparse())
         .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
 }
 
@@ -353,22 +303,20 @@ async fn interface_loop(
     let log = g.log.new(slog::o!(
 	"port" => name.to_string(),
 	"iface" => iface.to_string()));
-    let (pcap_in, pcap_out) = match pcap_open_duplex(&iface) {
-        Ok((i, o)) => (i, o),
-        Err(e) => {
-            error!(&log, "failed to open pcap"; "err" => e.to_string());
+    let transport = plat::Transport::new(&iface)
+        .map_err(|e| {
+            error!(&log, "failed to open transport"; "err" => e.to_string());
             // TODO: add a "failed" state to interfaces in the hash so the
             // client can retrieve an error message, rather than having them
             // silently disappear
             return;
-        }
-    };
-    debug!(&log, "pcaps open");
+        })
+        .unwrap();
 
-    let asyncfd = match tokio::io::unix::AsyncFd::new(pcap_in.raw_fd()) {
+    let asyncfd = match tokio::io::unix::AsyncFd::new(transport.get_poll_fd()) {
         Ok(f) => f,
         Err(e) => {
-            error!(g.log, "failed to wrap pcap fd for tokio: {e:?}");
+            error!(g.log, "failed to wrap transport fd for tokio: {e:?}");
             return;
         }
     };
@@ -388,7 +336,7 @@ async fn interface_loop(
                 }
                 Ok(Some(packet)) => {
                     trace!(&log, "transmit LLDPDU");
-                    match xmit_lldpdu(&pcap_out, packet).await {
+                    match xmit_lldpdu(&transport, packet).await {
                         Ok(n) => trace!(&log, "sent {n} bytes"),
                         Err(e) => error!(&log, "failed to xmit lldpdu";
 			    "err" => e.to_string()),
@@ -414,7 +362,7 @@ async fn interface_loop(
         };
 
         if do_read {
-            match pcap_in.next() {
+            match transport.packet_recv() {
                 Ok(None) => {
                     debug!(g.log, "no data");
                     break;
