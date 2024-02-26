@@ -29,6 +29,7 @@ function digest {
 
 banner "Packages"
 sudo apt update -y
+sudo apt install -y libpcap-dev libssl-dev pkg-config
 
 banner "Build"
 cargo build --release
