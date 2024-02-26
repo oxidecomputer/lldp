@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "Client library for the Dendrite data plane daemon"
 
+[features]
+dendrite = [ ]
+
 [dependencies]
 futures.workspace = true
 reqwest.workspace = true

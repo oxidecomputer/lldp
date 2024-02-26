@@ -21,6 +21,7 @@ pub struct ClientState {
 }
 
 // Automatically generate the client bindings using Progenitor.
+#[cfg(feature = "dendrite")]
 progenitor::generate_api!(
     spec = "../openapi/dpd.json",
     interface = Positional,

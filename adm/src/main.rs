@@ -137,18 +137,16 @@ enum Interface {
         iface: String,
     },
     /// Remove interface
-    #[structopt(visible_alias = "rm", visible_alias = "del")]
-    Remove { iface: String },
+    Del { iface: String },
     /// Manage a property on the interface
     Prop(IfaceProp),
     /// Manage the advertised capabilities for the interface
-    #[structopt(visible_alias = "cap", visible_alias = "capab")]
+    #[structopt(visible_alias = "cap")]
     Capability(Capability),
     /// Manage the management addresses for the interface
     #[structopt(visible_alias = "addr")]
     Address(IfaceAddress),
     /// Get a single configured interface
-    #[structopt(visible_alias = "ls")]
     Get { iface: String },
     /// List all configured interfaces
     #[structopt(visible_alias = "ls")]
@@ -165,11 +163,11 @@ enum SystemSetProp {
     /// Change the TTL advertised on all interfaces
     Ttl { ttl: u16 },
     /// Change the system name advertised on all interfaces
-    #[structopt(visible_alias = "name")]
-    Name { name: String },
+    #[structopt(visible_alias = "sysname")]
+    SystemName { name: String },
     /// Change the system description advertised on all interfaces
-    #[structopt(visible_alias = "desc")]
-    Description { desc: String },
+    #[structopt(visible_alias = "sysdesc")]
+    SystemDescription { desc: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -177,9 +175,9 @@ enum SystemSetProp {
 /// by changed - not removed.
 enum SystemDelProp {
     #[structopt(visible_alias = "name")]
-    Name,
+    SystemName,
     #[structopt(visible_alias = "desc")]
-    Description,
+    SystemDescription,
 }
 
 #[derive(Debug, StructOpt)]
@@ -287,16 +285,16 @@ async fn system_prop(client: &Client, prop: SystemProp) -> anyhow::Result<()> {
                 client.sys_set_chassis_id(&id).await
             }
             SystemSetProp::Ttl { ttl } => client.sys_set_ttl(ttl).await,
-            SystemSetProp::Name { name } => {
+            SystemSetProp::SystemName { name } => {
                 client.sys_set_system_name(&name).await
             }
-            SystemSetProp::Description { desc } => {
+            SystemSetProp::SystemDescription { desc } => {
                 client.sys_set_system_description(&desc).await
             }
         },
         SystemProp::Del(del) => match del {
-            SystemDelProp::Name => client.sys_del_system_name().await,
-            SystemDelProp::Description => {
+            SystemDelProp::SystemName => client.sys_del_system_name().await,
+            SystemDelProp::SystemDescription => {
                 client.sys_del_system_description().await
             }
         },
@@ -490,7 +488,7 @@ async fn main() -> anyhow::Result<()> {
                     .map(|r| r.into_inner())
                     .context("failed to add interface")
             }
-            Interface::Remove { iface } => client
+            Interface::Del { iface } => client
                 .interface_del(&iface)
                 .await
                 .map(|r| r.into_inner())
