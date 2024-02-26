@@ -15,6 +15,9 @@ do
 	cargo clippy --features $feat -- --deny warnings
 done
 
+banner "openapi"
+./tools/ci_download_dendrite_openapi
+
 # This file is generated dynamically during the build, and its absence here
 # makes rustfmt sad.
 echo '#![rustfmt::skip]' > lldpd/src/ffi.rs
