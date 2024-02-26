@@ -88,9 +88,16 @@ fn illumos_package() -> Result<()> {
         return Err(anyhow!("repo population failed"));
     }
 
+    let output_dir = Path::new("out");
+    if !output_dir.is_dir() {
+        fs::create_dir_all(output_dir)?;
+    } else {
+        let _ = std::fs::remove_file("out/lldp.p5p");
+    }
+
     // build the archive file
     let status = Command::new("/usr/bin/pkgrecv")
-        .args(vec!["-a", "-d", "lldp.p5p", "-s", &repo_dir, &fmri])
+        .args(vec!["-a", "-d", "out/lldp.p5p", "-s", &repo_dir, &fmri])
         .status()?;
     match status.success() {
         true => Ok(()),
