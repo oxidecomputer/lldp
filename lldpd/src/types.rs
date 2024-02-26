@@ -154,9 +154,9 @@ impl convert::From<LldpdError> for dropshot::HttpError {
                 dropshot::HttpError::for_bad_request(None, e)
             }
             LldpdError::TooSmall(_, _) => {
-                dropshot::HttpError::for_internal_error(format!(
-                    "internal buffer exceeded"
-                ))
+                dropshot::HttpError::for_internal_error(
+                    "internal buffer exceeded".to_string(),
+                )
             }
             LldpdError::Pcap(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Dlpi(e) => dropshot::HttpError::for_internal_error(e),
