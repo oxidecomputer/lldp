@@ -2,15 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-
 // Copyright 2024 Oxide Computer Company
 
-//! Client library for the LLDPS daemon.
+//! Client library for the LLDP daemon.
 
-/// Return the default port on which the `dpd` API server listens for clients.
+/// Return the default port on which the `lldpd` API server listens for clients.
 pub const fn default_port() -> u16 {
     ::common::DEFAULT_LLDPD_PORT
 }

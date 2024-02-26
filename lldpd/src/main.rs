@@ -2,20 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Todo:
-//   Connect to dpd
-//   Get switchinfo from dpd
-//   Accept sidecar ports as interfaces
-//   Fetch MAC address from dpd
-//   Check RFD for chassis_id, port_id, management address values
-//   Expire neighbors according to TTL
-//   Xmit packets according to TLL/RFC
-//   Read state machine part of RFC and implement
-//   Get onto centrum and verify that we're seeing expected info
-//   Revisit MAC address scope
-//   Put sidecar/dpd stuff behind a feature flag
-//   Store neighbors in per-interface vecs.
-//   Add optional interface arg to get_neighbors()
+// Copyright 2024 Oxide Computer Company
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
