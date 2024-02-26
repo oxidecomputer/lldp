@@ -5,7 +5,6 @@ members = [
 	"common",
 	"lldpd-client",
 	"lldpd",
-	"pcap",
 	"xtask",
 ]
 
@@ -16,7 +15,6 @@ resolver = "2"
 # intra-package dependencies
 lldpd-client = { path = "lldpd-client" }
 common = { path = "common" }
-pcap = { path = "pcap" }
 
 # oxide dependencies from github
 progenitor = { git = "https://github.com/oxidecomputer/progenitor", branch = "main"}

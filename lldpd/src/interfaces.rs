@@ -234,7 +234,7 @@ async fn interface_loop(
 
     let mut next_xmit = Instant::now();
     let mut done = false;
-    let mut buf = [0u8; 2048];
+    let mut buf = [0u8; 4096];
     while !done {
         if Instant::now() > next_xmit {
             match build_lldpdu_packet(&g, &name) {
@@ -279,6 +279,9 @@ async fn interface_loop(
                     break;
                 }
                 Ok(Some(n)) => handle_packet(&g, &name, &buf[0..n]),
+                Err(LldpdError::TooSmall(_, b)) => {
+                    warn!(g.log, "dropped excessively large packet: {b} bytes"; "port" => iface.clone())
+                }
                 Err(e) => {
                     error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
                     break;

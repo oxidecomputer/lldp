@@ -9,8 +9,6 @@ dendrite = [ "dep:dpd-client" ]
 smf = [ "dep:crucible-smf" ]
 
 [dependencies]
-pcap.workspace = true
-
 anyhow.workspace = true
 chrono.workspace = true
 common.workspace = true
@@ -38,6 +36,8 @@ optional = true
 
 [build-dependencies]
 anyhow.workspace = true
+cc = "1.0"
+bindgen = "0.64"
 
 [build-dependencies.vergen]
 version = "8.0"

@@ -96,6 +96,8 @@ pub enum LldpdError {
     Invalid(String),
     #[error("LLDP protocol error: {0}")]
     Protocol(String),
+    #[error("buffer too small for incoming packet. have: {0}  need: {1}")]
+    TooSmall(usize, usize),
     #[error("SMF error: {0}")]
     Smf(String),
     #[error("Pcap error: {0}")]
@@ -146,6 +148,11 @@ impl convert::From<LldpdError> for dropshot::HttpError {
             }
             LldpdError::Protocol(e) => {
                 dropshot::HttpError::for_bad_request(None, e)
+            }
+            LldpdError::TooSmall(_, _) => {
+                dropshot::HttpError::for_internal_error(format!(
+                    "internal buffer exceeded"
+                ))
             }
             LldpdError::Pcap(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Dlpi(e) => dropshot::HttpError::for_internal_error(e),
