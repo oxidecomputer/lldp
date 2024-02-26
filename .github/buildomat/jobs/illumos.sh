@@ -1,6 +1,6 @@
 #!/bin/bash
 #:
-#: name = "image"
+#: name = "illumos"
 #: variety = "basic"
 #: target = "helios-2.0"
 #: rust_toolchain = "stable"
@@ -24,7 +24,7 @@
 #: from_output = "/out/lldp.tar.gz"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp-asic.sha256.txt"
 #: from_output = "/out/lldp.sha256.txt"
 #:
