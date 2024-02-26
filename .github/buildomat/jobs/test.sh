@@ -9,14 +9,14 @@ set -o errexit
 set -o pipefail
 set -o xtrace
 
+banner "openapi"
+./tools/ci_download_dendrite_openapi
+
 banner "clippy"
 for feat in smf dendrite
 do
 	cargo clippy --features $feat -- --deny warnings
 done
-
-banner "openapi"
-./tools/ci_download_dendrite_openapi
 
 # This file is generated dynamically during the build, and its absence here
 # makes rustfmt sad.
