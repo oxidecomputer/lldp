@@ -13,6 +13,7 @@ use std::sync::Mutex;
 
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
+use slog::debug;
 use slog::info;
 use structopt::StructOpt;
 
@@ -22,6 +23,7 @@ use neighbors::NeighborId;
 use types::LldpdError;
 use types::LldpdResult;
 
+mod agent;
 mod api_server;
 mod interfaces;
 mod neighbors;
@@ -84,6 +86,7 @@ pub struct SwitchInfo {
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub management_addrs: BTreeSet<IpAddr>,
+    pub agent: agent::Agent,
 }
 
 #[derive(Debug, StructOpt)]
@@ -195,6 +198,7 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
         system_name: Some(system_name),
         system_description: Some(system_description),
         management_addrs: BTreeSet::new(),
+        agent: agent::Agent::default(),
     }
 }
 
@@ -224,9 +228,19 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
 
     signal_handler(global.clone(), api_tx);
 
+    debug!(&log, "shutting down API server");
     api_server_manager
         .await
         .expect("while shutting down the api_server_manager");
+
+    debug!(&log, "shutting down interface tasks");
+    for iface in global.interfaces.lock().unwrap().values() {
+        iface.lock().unwrap().shutdown().await;
+    }
+    debug!(&log, "waiting for tasks to exit");
+    while !global.interfaces.lock().unwrap().is_empty() {
+        let _ = tokio::time::sleep(std::time::Duration::from_millis(10));
+    }
 
     info!(&log, "exiting");
     Ok(())

@@ -94,6 +94,8 @@ impl TryFrom<&Lldpdu> for Vec<LldpTlv> {
     }
 }
 
+// TODO-completeness: We should pass back a more meaningful error code, so the
+// consumer can keep proper counts of each failure reason.
 impl TryFrom<&Vec<LldpTlv>> for Lldpdu {
     type Error = LldpdError;
 
@@ -124,20 +126,20 @@ impl TryFrom<&Vec<LldpTlv>> for Lldpdu {
         let mut system_capabilities = None;
         let mut management_addresses = Vec::new();
         let mut organizationally_specific = Vec::new();
+        let mut _tlvs_unrecognized = 0;
 
-        // XXX: error out if we get duplicates
-        let mut done = false;
         for tlv in data.iter().skip(3) {
-            if done {
-                return Err(protocol_error(
-                    "LLDP packet has TLVs afer EndOfLLDPDU`",
-                ));
-            }
-
-            let tlv_type: TlvType = tlv.lldp_tlv_type.try_into()?;
+            let tlv_type = match tlv.lldp_tlv_type.try_into() {
+                Ok(t) => t,
+                Err(_) => {
+                    _tlvs_unrecognized += 1;
+                    continue;
+                }
+            };
             tlv_sanity_check(tlv, tlv_type)?;
+
             match tlv_type {
-                TlvType::EndOfLLDPDU => done = true,
+                TlvType::EndOfLLDPDU => break,
                 TlvType::ChassisId => {
                     return Err(protocol_error(
                         "LLDP packet has multiple ChassisId TLVs`",
@@ -178,6 +180,8 @@ impl TryFrom<&Vec<LldpTlv>> for Lldpdu {
                     system_capabilities = Some(capabilities_from_tlv(tlv)?)
                 }
                 TlvType::OrganizationallySpecific => {
+                    // We don't currently recognized any of these
+                    _tlvs_unrecognized += 1;
                     organizationally_specific.push(tlv.try_into()?)
                 }
             }

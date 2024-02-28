@@ -17,6 +17,7 @@ use slog::error;
 use slog::info;
 use slog::trace;
 use slog::warn;
+use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
 use crate::neighbors;
@@ -27,6 +28,7 @@ use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use crate::Global;
 use common::MacAddr;
+use plat::Transport;
 use protocol::Lldpdu;
 
 // By default, we set an LLDPDUs TTL to 120 seconds.
@@ -53,7 +55,81 @@ pub struct Interface {
 
     pub management_addrs: Option<BTreeSet<IpAddr>>,
 
-    done_tx: mpsc::Sender<()>,
+    pub stats: Stats,
+
+    msg_tx: mpsc::Sender<InterfaceMsg>,
+    task_hdl: Option<tokio::task::JoinHandle<()>>,
+
+    /// The values below are settings defined in section 9.2.5 of the standard.
+    /// We support changing these settings are either the interface level or
+    /// system levl.  Any value of None in the Interface struct will default to
+    /// the system-level setting defined in the Agent structure.
+
+    /// Whether the agent should be sending, receiving, or both.
+    admin_status: Option<crate::agent::AdminStatus>,
+    /// How quickly to resend LLDPDUs during fast tx periods.
+    /// Measured in ticks from 1-3600.
+    msg_fast_tx: Option<u16>,
+    /// Multiplier of msg_tx_interval, used to calculate TTL.  Legal values
+    /// are 1-100.
+    msg_tx_hold: Option<u16>,
+    /// Time between LLDPDU transmissions during normal tx periods.
+    /// Measured in ticks from 1-3600.
+    msg_tx_interval: Option<u16>,
+    /// After becoming disabled, time in seconds to wait before attempting
+    /// reinitialization.
+    reinit_delay: Option<u16>,
+    /// Maximum value of tx_credit.  If None, default to the agent-level setting
+    tx_credit_max: Option<u16>,
+    /// Initial value of tx_fast.  If None, default to the agent-level setting
+    tx_fast_init: Option<u16>,
+
+    /// The values below are variables defined in section 9.2.5 of the standard.
+    /// These are set dynamically by the various state machines as the daemon
+    /// runs.  The standard defines a number of variables that are not reflected
+    /// here, as we implement them as per-task timers or inter-task messages
+    /// rather than as flag variables.
+
+    /// Number of LLDPDUs that can be transmitted at any one time
+    tx_credit: u16,
+    /// If this value is non-0, this interface is in fast tx mode, with tx_fast
+    /// packets remaining to send
+    tx_fast: u16,
+}
+
+/// Statistics described in section 9.2.6 of the standard
+#[derive(Clone, Debug, Default)]
+pub struct Stats {
+    /// How many times a neighbor's record has been deleted because its TTL
+    /// expired
+    ageouts_total: u64,
+    /// How many LLDP frames have been discarded because of an invalid TLV or
+    /// lack of local space
+    frames_discarded_total: u64,
+    /// LLDPDU frames discarded because of a detected error
+    frames_in_errors_total: u64,
+    /// Count of all LLDPDU frames received
+    frames_in_total: u64,
+    /// Count of all LLDPDU frames transmitted
+    frames_out_total: u64,
+    /// TLVs that were received and discarded for any reason
+    tlvs_discarded_total: u64,
+    /// Well-formed TLVs that were discarded because they were not recognized.
+    tlvs_unrecognized_total: u64,
+    /// LLDPDUs that were discarded because they violated a length restriction
+    lldpdu_length_errors: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InterfaceMsg {
+    UpdatedInfo,
+    TimeToGo,
+}
+
+impl Interface {
+    pub async fn shutdown(&mut self) {
+        let _ = self.msg_tx.send(InterfaceMsg::TimeToGo).await;
+    }
 }
 
 macro_rules! get_interface {
@@ -114,87 +190,194 @@ pub fn build_lldpdu(
     }
 }
 
-fn build_lldpdu_packet(g: &Global, name: &str) -> LldpdResult<Option<Packet>> {
-    let switchinfo = g.switchinfo.lock().unwrap().clone();
-    let iface_hash = g.interfaces.lock().unwrap();
-    let Some(iface) = iface_hash.get(name) else {
-        return Ok(None);
-    };
-    let iface = iface.lock().unwrap();
-
+fn build_lldpdu_packet(
+    switchinfo: &crate::SwitchInfo,
+    iface: &Interface,
+) -> Packet {
     let lldpdu = build_lldpdu(&switchinfo, &iface);
-    let tlvs: Vec<LldpTlv> = (&lldpdu).try_into()?;
+    let tlvs: Vec<LldpTlv> = (&lldpdu)
+        .try_into()
+        .expect(&format!("we constructed an invalid LLDPDU: {lldpdu:#?}"));
 
     let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
     let mut packet = Packet::new(tgt_mac, iface.mac);
     tlvs.iter().for_each(|tlv| packet.add_tlv(tlv));
 
-    Ok(Some(packet))
+    packet
 }
 
-async fn xmit_lldpdu(
-    transport: &plat::Transport,
-    packet: Packet,
-) -> LldpdResult<()> {
+fn build_shutdown_packet(
+    switchinfo: &crate::SwitchInfo,
+    iface: &Interface,
+) -> Packet {
+    let lldpdu = build_lldpdu(&switchinfo, &iface);
+    let tlvs: Vec<LldpTlv> = (&lldpdu)
+        .try_into()
+        .expect(&format!("we constructed an invalid LLDPDU: {lldpdu:#?}"));
+
+    let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
+    let mut packet = Packet::new(tgt_mac, iface.mac);
+    // The first two TLVs in a a load-bearing lldpdu contain the chassis_id and
+    // port_id.  The shutdown lldpdu we want to send will consist of those two
+    // TLVs and a TLV with a TTL of 0.
+    packet.add_tlv(&tlvs[0]);
+    packet.add_tlv(&tlvs[1]);
+    packet.add_tlv(&protocol::ttl_to_tlv(0));
+
+    packet
+}
+
+async fn xmit_lldpdu(transport: &Transport, packet: Packet) -> LldpdResult<()> {
     transport
         .packet_send(&packet.deparse())
         .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
 }
 
-fn try_add(
-    g: &Global,
-    name: &str,
-    interface: Option<Interface>,
-) -> LldpdResult<()> {
-    let mut iface_hash = g.interfaces.lock().unwrap();
-    if iface_hash.get(name).is_some() {
-        return Err(LldpdError::Exists("interface already added".into()));
-    }
-    if let Some(i) = interface {
-        iface_hash.insert(name.to_string(), Mutex::new(i));
-    }
-    Ok(())
+fn error_accounting(g: &Global, name: &str, _error: LldpdError) {
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)
+        .expect("interface still exists, so it must be in the hash");
+    iface.stats.frames_in_errors_total += 1;
+    iface.stats.frames_discarded_total += 1;
 }
 
-fn interface_remove(g: &Global, name: &str) {
-    let mut iface_hash = g.interfaces.lock().unwrap();
-    match iface_hash.remove(name) {
-        Some(i) => {
-            info!(&g.log, "removed {name} from interface hash");
-            let i = i.lock().unwrap();
-            let _ = &i.done_tx.send(());
-        }
-        None => {
-            error!(&g.log, "unable to remove interface: not in interface hash";
-	    "port" => name);
-        }
-    }
-}
-
-fn handle_packet(g: &Global, name: &str, data: &[u8]) {
+fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
     let packet = match Packet::parse(data) {
         Ok(Some(packet)) => packet,
         Ok(None) => return,
         Err(e) => {
-            debug!(g.log, "failed to parse packet: {:?}", e;
-		    "port" => name);
-            return;
+            debug!(log, "failed to parse packet: {:?}", e);
+            return error_accounting(g, name, e);
         }
     };
 
     if packet.lldp_hdr.lldp_data.is_empty() {
-        debug!(g.log, "found packet with LLDP ethertype but no header";
-		    "port" => name);
-    } else {
-        match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
-            Ok(lldpdu) => {
-                trace!(g.log, "handling incoming LLDPDU"; "port" => name);
-                crate::neighbors::incoming_lldpdu(g, name, lldpdu)
-            }
-            Err(e) => error!(g.log, "parsing LLDP packet failed: {e:?}";
-		 "port" => name),
+        debug!(log, "found packet with LLDP ethertype but no header");
+        return error_accounting(
+            g,
+            name,
+            LldpdError::Protocol("missing header".to_string()),
+        );
+    }
+
+    match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
+        Ok(lldpdu) => {
+            trace!(log, "handling incoming LLDPDU");
+            crate::neighbors::incoming_lldpdu(g, name, lldpdu)
+        }
+        Err(e) => {
+            error!(log, "parsing LLDP packet failed: {e:?}");
+            error_accounting(g, name, e);
         }
     }
+}
+
+// Construct and transmit an LLDPDU on this interface.  Return the number of
+// ticks to delay before issing the next one.
+async fn tx_lldpdu(
+    g: &Global,
+    log: &slog::Logger,
+    transport: &Transport,
+    name: &String,
+) -> u16 {
+    let ticks;
+    let packet = {
+        let switchinfo = g.switchinfo.lock().unwrap().clone();
+        let iface_hash = g.interfaces.lock().unwrap();
+        let mut iface = get_interface!(iface_hash, name)
+            .expect("interface hash entry should persist until task exits");
+        let status = iface
+            .admin_status
+            .unwrap_or_else(|| switchinfo.agent.admin_status);
+
+        if !status.has_tx() {
+            return u16::MAX;
+        }
+
+        if iface.tx_fast > 0 {
+            iface.tx_fast -= 1;
+            ticks = iface
+                .msg_fast_tx
+                .unwrap_or_else(|| switchinfo.agent.msg_fast_tx);
+        } else {
+            ticks = iface
+                .msg_tx_interval
+                .unwrap_or_else(|| switchinfo.agent.msg_tx_interval);
+        }
+        build_lldpdu_packet(&switchinfo, &iface)
+    };
+    trace!(&log, "transmit LLDPDU");
+    if let Err(e) = xmit_lldpdu(&transport, packet).await {
+        error!(&log, "failed to xmit lldpdu"; "err" => e.to_string());
+    }
+    ticks
+}
+
+// Construct and transmit a "shutting down" LLDPDU on this interface.
+async fn tx_shutdown(
+    g: &Global,
+    log: &slog::Logger,
+    transport: &Transport,
+    name: &String,
+) {
+    let packet = {
+        let switchinfo = g.switchinfo.lock().unwrap().clone();
+        let iface_hash = g.interfaces.lock().unwrap();
+        let iface = get_interface!(iface_hash, name)
+            .expect("interface hash entry should persist until task exits");
+        let status = iface
+            .admin_status
+            .unwrap_or_else(|| switchinfo.agent.admin_status);
+
+        if !status.has_tx() {
+            return;
+        }
+
+        build_shutdown_packet(&switchinfo, &iface)
+    };
+    trace!(&log, "transmit shutdown LLDPDU");
+    if let Err(e) = xmit_lldpdu(&transport, packet).await {
+        error!(&log, "failed to xmit lldpdu"; "err" => e.to_string());
+    }
+}
+
+enum WakeupEvent {
+    Message(InterfaceMsg),
+    FdReady,
+    Timeout,
+}
+
+async fn wait_for_event(
+    msg_rx: &mut mpsc::Receiver<InterfaceMsg>,
+    asyncfd: &AsyncFd<i32>,
+    timeout: Instant,
+) -> WakeupEvent {
+    tokio::task::yield_now().await;
+    let now = Instant::now();
+    let delay = if timeout <= now {
+        return WakeupEvent::Timeout;
+    } else {
+        timeout - now
+    };
+
+    tokio::select! {
+        msg = msg_rx.recv() => WakeupEvent::Message(msg.expect("channel shouldn't be dropped while the interface thead is alive")),
+    _= asyncfd.readable() => WakeupEvent::FdReady,
+    _ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
+    }
+}
+
+fn transport_init(iface: &String) -> LldpdResult<(Transport, AsyncFd<i32>)> {
+    let transport = plat::Transport::new(&iface)?;
+    transport.get_poll_fd().and_then(|fd| {
+        tokio::io::unix::AsyncFd::new(fd)
+            .map_err(|e| {
+                LldpdError::Other(format!(
+                    "failed to wrap transport fd for tokio: {e:?}"
+                ))
+            })
+            .map(|asyncfd| (transport, asyncfd))
+    })
 }
 
 // Clippy mistakenly believes that the returns in the map_err code below are
@@ -204,100 +387,59 @@ async fn interface_loop(
     g: Arc<Global>,
     name: String,
     iface: String,
-    mut done_rx: mpsc::Receiver<()>,
+    mut msg_rx: mpsc::Receiver<InterfaceMsg>,
 ) {
     let log = g.log.new(slog::o!(
 	"port" => name.to_string(),
 	"iface" => iface.to_string()));
-    let transport = plat::Transport::new(&iface)
-        .map_err(|e| {
+
+    let (transport, asyncfd) = match transport_init(&iface) {
+        Ok((t, a)) => (t, a),
+        Err(e) => {
             // TODO: add a "failed" state to interfaces in the hash so the
             // client can retrieve an error message, rather than having them
             // silently disappear
-            error!(&log, "failed to open transport"; "err" => e.to_string());
+            error!(log, "failed to init transport: {e:?}");
             return;
-        })
-        .unwrap();
+        }
+    };
 
-    let asyncfd = transport
-        .get_poll_fd()
-        .map_err(|e| {
-            error!(g.log, "failed to get transport fd: {e:?}");
-            return;
-        })
-        .map(|fd| {
-            tokio::io::unix::AsyncFd::new(fd)
-                .map_err(|e| {
-                    error!(
-                        g.log,
-                        "failed to wrap transport fd for tokio: {e:?}"
-                    );
-                    return;
-                })
-                .unwrap()
-        })
-        .unwrap();
-
-    let mut next_xmit = Instant::now();
-    let mut done = false;
     let mut buf = [0u8; 4096];
-    while !done {
-        if Instant::now() > next_xmit {
-            match build_lldpdu_packet(&g, &name) {
-                Err(e) => {
-                    error!(&log, "Failed to build lldpdu";
-			"err" => e.to_string());
-                }
-                Ok(None) => {
-                    warn!(&log, "iface removed");
-                    break;
-                }
-                Ok(Some(packet)) => {
-                    trace!(&log, "transmit LLDPDU");
-                    if let Err(e) = xmit_lldpdu(&transport, packet).await {
-                        error!(&log, "failed to xmit lldpdu";
-			    "err" => e.to_string());
-                    }
-                }
-            }
-            next_xmit = Instant::now() + Duration::from_secs(30);
+    let mut next_tx = Instant::now();
+    loop {
+        if Instant::now() > next_tx {
+            let ticks = tx_lldpdu(&g, &log, &transport, &name).await;
+            next_tx = Instant::now() + Duration::from_secs(ticks as u64);
         }
 
-        let now = Instant::now();
-        let delay = if next_xmit > now {
-            next_xmit - now
-        } else {
-            Duration::from_secs(0)
-        };
-
-        let mut do_read = false;
-        tokio::task::yield_now().await;
-        tokio::select! {
-            _= done_rx.recv() => { done = true}
-        _= asyncfd.readable() => { do_read = true}
-        _ = tokio::time::sleep(delay) => {}
-        };
-
-        if do_read {
-            match transport.packet_recv(&mut buf) {
-                Ok(None) => {
-                    debug!(g.log, "no data");
-                    break;
-                }
-                Ok(Some(n)) => handle_packet(&g, &name, &buf[0..n]),
+        match wait_for_event(&mut msg_rx, &asyncfd, next_tx).await {
+            WakeupEvent::Message(msg) => match msg {
+                InterfaceMsg::TimeToGo => break,
+                InterfaceMsg::UpdatedInfo => next_tx = Instant::now(),
+            },
+            WakeupEvent::FdReady => match transport.packet_recv(&mut buf) {
+                Ok(None) => { /* spurious wakeup? */ }
+                Ok(Some(n)) => handle_packet(&g, &log, &name, &buf[0..n]),
                 Err(LldpdError::TooSmall(_, b)) => {
-                    warn!(g.log, "dropped excessively large packet: {b} bytes"; "port" => iface.clone())
+                    warn!(log, "dropped excessively large packet: {b} bytes");
                 }
                 Err(e) => {
-                    error!(g.log, "listener died: {e:?}"; "port" => iface.clone());
+                    error!(log, "listener died: {e:?}");
                     break;
                 }
+            },
+            WakeupEvent::Timeout => {
+                // packet transmit happens at the top of the loop
             }
         }
     }
 
+    tx_shutdown(&g, &log, &transport, &name).await;
     debug!(log, "interface loop shutting down");
-    interface_remove(&g, &name);
+    let mut iface_hash = g.interfaces.lock().unwrap();
+    iface_hash
+        .remove(&name)
+        .expect("interface hash entry should persist until task exits");
 }
 
 pub fn neighbor_id_match(g: &Global, id: &neighbors::NeighborId) -> bool {
@@ -326,15 +468,26 @@ pub async fn interface_add(
     port_description: Option<String>,
 ) -> LldpdResult<()> {
     info!(&global.log, "Adding interface"; "name" => name.to_string());
-    try_add(global, &name, None)?;
-
-    let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
 
     let port_id =
         port_id.unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
-    let (done_tx, done_rx) = mpsc::channel(1);
+    let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
+
+    let mut iface_hash = global.interfaces.lock().unwrap();
+    if iface_hash.get(&name).is_some() {
+        return Err(LldpdError::Exists("interface already added".into()));
+    }
+
+    let (msg_tx, msg_rx) = mpsc::channel(1);
+    let global = global.clone();
+    let task_iface = iface.clone();
+    let task_name = name.clone();
+    let task_hdl = tokio::task::spawn(async move {
+        interface_loop(global, task_name, task_iface, msg_rx).await
+    });
+
     let interface = Interface {
-        iface: iface.clone(),
+        iface,
         mac,
         chassis_id,
         port_id,
@@ -343,14 +496,23 @@ pub async fn interface_add(
         system_description,
         port_description,
         management_addrs: None,
-        done_tx,
+        msg_tx,
+        task_hdl: Some(task_hdl),
+
+        stats: Stats::default(),
+        admin_status: None,
+        msg_fast_tx: None,
+        msg_tx_hold: None,
+        msg_tx_interval: None,
+        reinit_delay: None,
+        tx_credit_max: None,
+        tx_fast_init: None,
+        tx_credit: 0,
+        tx_fast: 0,
     };
 
-    try_add(global, &name, Some(interface))?;
-    let global = global.clone();
-    let _hdl = tokio::task::spawn(async move {
-        interface_loop(global, name, iface, done_rx).await
-    });
+    iface_hash.insert(name, Mutex::new(interface));
+
     Ok(())
 }
 
