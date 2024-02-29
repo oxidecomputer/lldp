@@ -89,21 +89,6 @@ async fn sys_set_chassis_id(
     Ok(HttpResponseUpdatedNoContent())
 }
 
-/// Set the default TTL advertised on all ports
-#[endpoint {
-	method = POST,
-	path = "/system/ttl",
-}]
-async fn sys_set_ttl(
-    rqctx: RequestContext<Arc<Global>>,
-    body: TypedBody<u16>,
-) -> Result<HttpResponseUpdatedNoContent, HttpError> {
-    let global: &Global = rqctx.context();
-    let val = body.into_inner();
-    debug!(global.log, "set ttl = {:?}", val);
-    Ok(HttpResponseUpdatedNoContent())
-}
-
 /// Set the default system name advertised on all ports
 #[endpoint {
 	method = POST,
@@ -293,7 +278,6 @@ pub struct Interface {
 pub struct InterfaceAdd {
     pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: Option<protocol::PortId>,
-    pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
@@ -322,7 +306,6 @@ async fn interface_add(
         interface,
         params.chassis_id,
         params.port_id,
-        params.ttl,
         params.system_name,
         params.system_description,
         params.port_description,
@@ -420,6 +403,7 @@ async fn interface_set_chassis_id(
     let inner = path.into_inner();
     let val = body.into_inner();
     interfaces::chassis_id_set(global, &inner.iface, val)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
 }
@@ -435,6 +419,7 @@ async fn interface_del_chassis_id(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::chassis_id_del(global, &inner.iface)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseDeleted())
 }
@@ -452,40 +437,9 @@ async fn interface_set_port_id(
     let inner = path.into_inner();
     let val = body.into_inner();
     interfaces::port_id_set(global, &inner.iface, val)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
-}
-
-#[endpoint {
-	method = POST,
-	path = "/interface/{iface}/ttl",
-}]
-async fn interface_set_ttl(
-    rqctx: RequestContext<Arc<Global>>,
-    path: Path<InterfacePathParams>,
-    body: TypedBody<u16>,
-) -> Result<HttpResponseUpdatedNoContent, HttpError> {
-    let global: &Global = rqctx.context();
-    let inner = path.into_inner();
-    let val = body.into_inner();
-    interfaces::ttl_set(global, &inner.iface, val)
-        .map_err(|e| e.into())
-        .map(|_| HttpResponseUpdatedNoContent())
-}
-
-#[endpoint {
-    method = DELETE,
-    path = "/interface/{iface}/ttl",
-}]
-async fn interface_del_ttl(
-    rqctx: RequestContext<Arc<Global>>,
-    path: Path<InterfacePathParams>,
-) -> Result<HttpResponseDeleted, HttpError> {
-    let global: &Global = rqctx.context();
-    let inner = path.into_inner();
-    interfaces::ttl_del(global, &inner.iface)
-        .map_err(|e| e.into())
-        .map(|_| HttpResponseDeleted())
 }
 
 #[endpoint {
@@ -501,6 +455,7 @@ async fn interface_set_port_description(
     let inner = path.into_inner();
     let val = body.into_inner();
     interfaces::port_desc_set(global, &inner.iface, &val)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
 }
@@ -516,6 +471,7 @@ async fn interface_del_port_description(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::port_desc_del(global, &inner.iface)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseDeleted())
 }
@@ -533,6 +489,7 @@ async fn interface_set_system_name(
     let inner = path.into_inner();
     let val = body.into_inner();
     interfaces::system_name_set(global, &inner.iface, &val)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
 }
@@ -548,6 +505,7 @@ async fn interface_del_system_name(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::system_name_del(global, &inner.iface)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseDeleted())
 }
@@ -565,6 +523,7 @@ async fn interface_set_system_description(
     let inner = path.into_inner();
     let val = body.into_inner();
     interfaces::system_desc_set(global, &inner.iface, &val)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
 }
@@ -580,6 +539,7 @@ async fn interface_del_system_description(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::system_desc_del(global, &inner.iface)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseDeleted())
 }
@@ -680,6 +640,7 @@ async fn interface_add_management_addr(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::addr_add(global, &inner.iface, &inner.address)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseUpdatedNoContent())
 }
@@ -695,8 +656,9 @@ async fn interface_del_management_addr(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::addr_delete(global, &inner.iface, &inner.address)
-        .map_err(|e| e.into())
+        .await
         .map(|_| HttpResponseDeleted())
+        .map_err(HttpError::from)
 }
 
 #[endpoint {
@@ -710,6 +672,7 @@ async fn interface_clear_management_addr(
     let global: &Global = rqctx.context();
     let inner = path.into_inner();
     interfaces::addr_delete_all(global, &inner.iface)
+        .await
         .map_err(|e| e.into())
         .map(|_| HttpResponseDeleted())
 }
@@ -890,7 +853,6 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
 
     api.register(build_info).unwrap();
     api.register(sys_set_chassis_id).unwrap();
-    api.register(sys_set_ttl).unwrap();
     api.register(sys_set_system_name).unwrap();
     api.register(sys_del_system_name).unwrap();
     api.register(sys_set_system_description).unwrap();
@@ -911,8 +873,6 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     api.register(interface_set_chassis_id).unwrap();
     api.register(interface_del_chassis_id).unwrap();
     api.register(interface_set_port_id).unwrap();
-    api.register(interface_del_ttl).unwrap();
-    api.register(interface_set_ttl).unwrap();
     api.register(interface_set_port_description).unwrap();
     api.register(interface_del_port_description).unwrap();
     api.register(interface_set_system_name).unwrap();

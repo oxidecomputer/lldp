@@ -21,7 +21,6 @@ use errors::LldpdError;
 use interfaces::Interface;
 use types::LldpdResult;
 
-mod agent;
 mod api_server;
 mod errors;
 mod interfaces;
@@ -53,7 +52,7 @@ pub struct Global {
     /// List of addresses on which the api_server should listen.
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
     /// List of interfaces we are managing
-    pub interfaces: Mutex<BTreeMap<String, Mutex<Interface>>>,
+    pub interfaces: Mutex<BTreeMap<String, Arc<Mutex<Interface>>>>,
 }
 
 unsafe impl Send for Global {}

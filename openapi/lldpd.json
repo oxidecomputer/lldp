@@ -493,31 +493,6 @@
             "$ref": "#/components/responses/Error"
           }
         }
-      },
-      "delete": {
-        "operationId": "interface_del_port_id",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "iface",
-            "description": "The switch port on which to operate.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "successful deletion"
-          },
-          "4XX": {
-            "$ref": "#/components/responses/Error"
-          },
-          "5XX": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
       }
     },
     "/interface/{iface}/system_capability/{capability}": {
@@ -690,71 +665,6 @@
       },
       "delete": {
         "operationId": "interface_del_system_name",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "iface",
-            "description": "The switch port on which to operate.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "successful deletion"
-          },
-          "4XX": {
-            "$ref": "#/components/responses/Error"
-          },
-          "5XX": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/interface/{iface}/ttl": {
-      "post": {
-        "operationId": "interface_set_ttl",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "iface",
-            "description": "The switch port on which to operate.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "title": "uint16",
-                "type": "integer",
-                "format": "uint16",
-                "minimum": 0
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "resource updated"
-          },
-          "4XX": {
-            "$ref": "#/components/responses/Error"
-          },
-          "5XX": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "interface_del_ttl",
         "parameters": [
           {
             "in": "path",
@@ -1097,36 +1007,6 @@
           }
         }
       }
-    },
-    "/system/ttl": {
-      "post": {
-        "summary": "Set the default TTL advertised on all ports",
-        "operationId": "sys_set_ttl",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "title": "uint16",
-                "type": "integer",
-                "format": "uint16",
-                "minimum": 0
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "resource updated"
-          },
-          "4XX": {
-            "$ref": "#/components/responses/Error"
-          },
-          "5XX": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
     }
   },
   "components": {
@@ -1344,12 +1224,6 @@
           "system_name": {
             "nullable": true,
             "type": "string"
-          },
-          "ttl": {
-            "nullable": true,
-            "type": "integer",
-            "format": "uint16",
-            "minimum": 0
           }
         }
       },

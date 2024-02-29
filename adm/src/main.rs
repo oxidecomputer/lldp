@@ -35,61 +35,27 @@ struct GlobalOpts {
 #[derive(Debug, StructOpt)]
 enum IfaceSetProp {
     #[structopt(visible_alias = "cid")]
-    ChassisId {
-        iface: String,
-        chassis_id: String,
-    },
+    ChassisId { iface: String, chassis_id: String },
     #[structopt(visible_alias = "pid")]
-    PortId {
-        iface: String,
-        id: String,
-    },
-    Ttl {
-        iface: String,
-        ttl: u16,
-    },
+    PortId { iface: String, id: String },
     #[structopt(visible_alias = "portdesc")]
-    PortDescription {
-        iface: String,
-        desc: String,
-    },
+    PortDescription { iface: String, desc: String },
     #[structopt(visible_alias = "sysname")]
-    SystemName {
-        iface: String,
-        name: String,
-    },
+    SystemName { iface: String, name: String },
     #[structopt(visible_alias = "sysdesc")]
-    SystemDescription {
-        iface: String,
-        desc: String,
-    },
+    SystemDescription { iface: String, desc: String },
 }
 
 #[derive(Debug, StructOpt)]
 enum IfaceDelProp {
     #[structopt(visible_alias = "cid")]
-    ChassisId {
-        iface: String,
-    },
-    #[structopt(visible_alias = "pid")]
-    PortId {
-        iface: String,
-    },
-    Ttl {
-        iface: String,
-    },
+    ChassisId { iface: String },
     #[structopt(visible_alias = "portdesc")]
-    PortDescription {
-        iface: String,
-    },
+    PortDescription { iface: String },
     #[structopt(visible_alias = "sysname")]
-    SystemName {
-        iface: String,
-    },
+    SystemName { iface: String },
     #[structopt(visible_alias = "sysdesc")]
-    SystemDescription {
-        iface: String,
-    },
+    SystemDescription { iface: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -132,8 +98,6 @@ enum Interface {
         chassis_id: Option<String>,
         #[structopt(long, short = "p")]
         port_id: Option<String>,
-        #[structopt(long, short = "t")]
-        ttl: Option<u16>,
         #[structopt(long)]
         system_name: Option<String>,
         #[structopt(long)]
@@ -166,8 +130,6 @@ enum SystemSetProp {
     /// Change the ChassisId advertised on all interfaces
     #[structopt(visible_alias = "cid")]
     ChassisId { chassis_id: String },
-    /// Change the TTL advertised on all interfaces
-    Ttl { ttl: u16 },
     /// Change the system name advertised on all interfaces
     #[structopt(visible_alias = "sysname")]
     SystemName { name: String },
@@ -290,7 +252,6 @@ async fn system_prop(client: &Client, prop: SystemProp) -> anyhow::Result<()> {
                 let id = types::ChassisId::ChassisComponent(chassis_id);
                 client.sys_set_chassis_id(&id).await
             }
-            SystemSetProp::Ttl { ttl } => client.sys_set_ttl(ttl).await,
             SystemSetProp::SystemName { name } => {
                 client.sys_set_system_name(&name).await
             }
@@ -386,9 +347,6 @@ async fn interface_prop(
                 let port_id = types::PortId::PortComponent(id);
                 client.interface_set_port_id(&iface, &port_id).await
             }
-            IfaceSetProp::Ttl { iface, ttl } => {
-                client.interface_set_ttl(&iface, ttl).await
-            }
             IfaceSetProp::PortDescription { iface, desc } => {
                 client.interface_set_port_description(&iface, &desc).await
             }
@@ -402,12 +360,6 @@ async fn interface_prop(
         IfaceProp::Del(del) => match del {
             IfaceDelProp::ChassisId { iface } => {
                 client.interface_del_chassis_id(&iface).await
-            }
-            IfaceDelProp::PortId { iface } => {
-                client.interface_del_port_id(&iface).await
-            }
-            IfaceDelProp::Ttl { iface } => {
-                client.interface_del_ttl(&iface).await
             }
             IfaceDelProp::PortDescription { iface } => {
                 client.interface_del_port_description(&iface).await
@@ -469,7 +421,6 @@ async fn main() -> anyhow::Result<()> {
             Interface::Add {
                 chassis_id,
                 port_id,
-                ttl,
                 system_name,
                 system_description,
                 port_description,
@@ -483,7 +434,6 @@ async fn main() -> anyhow::Result<()> {
                 let add_args = types::InterfaceAdd {
                     chassis_id,
                     port_id,
-                    ttl,
                     system_name,
                     system_description,
                     port_description,

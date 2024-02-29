@@ -99,17 +99,21 @@ pub struct Neighbor {
 
     /// The latest advertised data received from this neighbor
     pub lldpdu: protocol::Lldpdu,
+    /// When this record expires
+    pub expires_at: DateTime<Utc>,
 }
 
 impl Neighbor {
     pub fn from_lldpdu(lldpdu: &protocol::Lldpdu) -> Self {
         let now = Utc::now();
 
+        let ttl = std::time::Duration::from_secs(lldpdu.ttl as u64);
         Neighbor {
             first_seen: now,
             last_seen: now,
             last_changed: now,
             lldpdu: lldpdu.clone(),
+            expires_at: now + ttl,
         }
     }
 }

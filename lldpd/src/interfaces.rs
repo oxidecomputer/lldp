@@ -34,9 +34,6 @@ use common::MacAddr;
 use plat::Transport;
 use protocol::Lldpdu;
 
-// By default, we set an LLDPDUs TTL to 120 seconds.
-const DEFAULT_TTL: u16 = 120;
-
 #[cfg(target_os = "illumos")]
 use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
@@ -44,6 +41,8 @@ use crate::plat_linux as plat;
 
 #[derive(Debug)]
 pub struct Interface {
+    log: slog::Logger,
+
     /// Name of the interface on which LLDPDUs are sent and received.
     /// For sidecar ports, this will be the tfport.
     pub iface: String,
@@ -52,7 +51,6 @@ pub struct Interface {
     /// Configurable properties
     pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: protocol::PortId,
-    pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
@@ -141,15 +139,18 @@ impl Interface {
 
 // Convenience macro to look for an interface in the hash and return a
 // consistent error if it's not found.
-macro_rules! get_interface {
-    ($hash:ident, $name:ident) => {
-        $hash
-            .get($name)
-            .ok_or_else(|| {
-                LldpdError::Missing(format!("no such interface: {}", $name))
-            })
-            .map(|i| i.lock().unwrap())
-    };
+fn get_interface(
+    g: &Global,
+    iface: &str,
+) -> LldpdResult<Arc<Mutex<Interface>>> {
+    g.interfaces
+        .lock()
+        .unwrap()
+        .get(iface)
+        .ok_or_else(|| {
+            LldpdError::Missing(format!("no such interface: {iface}"))
+        })
+        .map(|i| i.clone())
 }
 
 // Construct an LLDPDU structure with all of the information we have about this
@@ -169,19 +170,29 @@ pub fn build_lldpdu(
     avail.insert(protocol::SystemCapabilities::Router);
     let enabled = avail.clone();
 
-    // XXX: this can be done more neatly with iter().map().collect()
-    let mut management_addresses = Vec::new();
-    let addrs = iface
+    // The advertised TTL is derived by multiplying the tx_interval by the
+    // tx_hold.
+    let tx_interval = iface
+        .msg_tx_interval
+        .unwrap_or_else(|| switchinfo.agent.msg_tx_interval);
+    let tx_hold = iface
+        .msg_tx_hold
+        .unwrap_or_else(|| switchinfo.agent.msg_tx_hold);
+    let ttl: u16 = tx_interval.saturating_mul(tx_hold);
+
+    let management_addresses = iface
         .management_addrs
         .as_ref()
-        .unwrap_or(&switchinfo.management_addrs);
-    for addr in addrs {
-        management_addresses.push(protocol::ManagementAddress {
+        .unwrap_or(&switchinfo.management_addrs)
+        .iter()
+        .map(|addr| protocol::ManagementAddress {
             addr: *addr,
+            // TODO-completeness: include an interface number with each
+            // management address.
             interface_num: protocol::InterfaceNum::Unknown(0),
             oid: None,
-        });
-    }
+        })
+        .collect();
 
     let system_name = match &iface.system_name {
         Some(n) => Some(n.clone()),
@@ -194,7 +205,7 @@ pub fn build_lldpdu(
     Lldpdu {
         chassis_id,
         port_id: iface.port_id.clone(),
-        ttl: iface.ttl.unwrap_or(DEFAULT_TTL),
+        ttl,
         system_capabilities: Some((avail, enabled)),
         port_description: iface.port_description.clone(),
         system_name,
@@ -253,24 +264,25 @@ async fn xmit_lldpdu(transport: &Transport, packet: Packet) -> LldpdResult<()> {
 }
 
 // Bump error statistics when receiving a bad packet
-fn error_accounting(g: &Global, name: &str, _error: LldpdError) {
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)
-        .expect("interface still exists, so it must be in the hash");
+fn error_accounting(iface: &mut Interface, _error: LldpdError) {
     iface.stats.frames_in_errors_total += 1;
     iface.stats.frames_discarded_total += 1;
 }
 
 // Process a single packet that arrived on our transport.
-fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
+fn handle_packet(
+    switchinfo: &crate::SwitchInfo,
+    iface: &mut Interface,
+    data: &[u8],
+) {
     // Given a raw packet, extract the ethernet and LLDP headers and drop
     // anything else.
     let packet = match Packet::parse(data) {
         Ok(Some(packet)) => packet,
         Ok(None) => return, // non-LLDP packet
         Err(e) => {
-            debug!(log, "failed to parse packet: {:?}", e);
-            return error_accounting(g, name, e);
+            debug!(iface.log, "failed to parse packet: {:?}", e);
+            return error_accounting(iface, e);
         }
     };
 
@@ -279,25 +291,19 @@ fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
     let lldpdu = match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
         Ok(lldpdu) => lldpdu,
         Err(e) => {
-            error!(log, "parsing LLDP packet failed: {e:?}");
+            error!(iface.log, "parsing LLDP packet failed: {e:?}");
             // TODO-completeness: examine the error details to detect the
             // specific failure modes for which the spec has counters.
-            return error_accounting(g, name, e);
+            return error_accounting(iface, e);
         }
     };
-
     let id = types::NeighborId::new(&lldpdu);
-    let switchinfo = g.switchinfo.lock().unwrap().clone();
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)
-        .expect("interface hash entry should persist until task exits");
 
     // If one of our own LLDPDUs was reflected back to us, drop it
     if match &iface.chassis_id {
         Some(chassis_id) => chassis_id == &lldpdu.chassis_id,
         None => switchinfo.chassis_id == lldpdu.chassis_id,
     } {
-        trace!(log, "ignoring our own lldpdu for {id:?}");
         return;
     }
 
@@ -307,18 +313,26 @@ fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
         Entry::Vacant(e) => {
             let sysinfo: types::SystemInfo = (&lldpdu).into();
             let neighbor = types::Neighbor::from_lldpdu(&lldpdu);
-            info!(log, "new neighbor {:?}: {}", id, &sysinfo);
+            info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
             e.insert(neighbor);
         }
         Entry::Occupied(old) => {
+            // A TTL of 0 is a signal that the neighbor is going away.  This
+            // doesn't require any special handling here, as the updated
+            // "expires_at" field will cause it to be cleaned up
+            // automatically.
+            let ttl = std::time::Duration::from_secs(lldpdu.ttl as u64);
             let now = Utc::now();
             let old = old.into_mut();
             old.last_seen = now;
+            old.expires_at = now + ttl;
             if old.lldpdu != lldpdu {
                 let sysinfo: types::SystemInfo = (&lldpdu).into();
-                info!(log, "updated neighbor {:?}: {}", id, &sysinfo);
                 old.last_changed = now;
                 old.lldpdu = lldpdu;
+                info!(iface.log, "updated neighbor {:?}: {}", id, &sysinfo);
+            } else {
+                trace!(iface.log, "refresh neighbor {:?}", id);
             }
         }
     };
@@ -327,17 +341,17 @@ fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
 // Construct and transmit an LLDPDU on this interface.  Return the number of
 // ticks to delay before issuing the next one.
 async fn tx_lldpdu(
-    g: &Global,
-    log: &slog::Logger,
+    switchinfo: &crate::SwitchInfo,
+    iface_lock: &Mutex<Interface>,
     transport: &Transport,
-    name: &String,
 ) -> u16 {
     let ticks;
+    let log;
+
     let packet = {
-        let switchinfo = g.switchinfo.lock().unwrap().clone();
-        let iface_hash = g.interfaces.lock().unwrap();
-        let mut iface = get_interface!(iface_hash, name)
-            .expect("interface hash entry should persist until task exits");
+        let mut iface = iface_lock.lock().unwrap();
+        log = iface.log.clone();
+
         let status = iface
             .admin_status
             .unwrap_or_else(|| switchinfo.agent.admin_status);
@@ -358,25 +372,26 @@ async fn tx_lldpdu(
         }
         build_lldpdu_packet(&switchinfo, &iface)
     };
-    trace!(&log, "transmit LLDPDU");
+
+    trace!(log, "transmit LLDPDU");
     if let Err(e) = xmit_lldpdu(&transport, packet).await {
-        error!(&log, "failed to xmit lldpdu"; "err" => e.to_string());
+        error!(log, "failed to xmit lldpdu"; "err" => e.to_string());
     }
     ticks
 }
 
 // Construct and transmit a "shutting down" LLDPDU on this interface.
 async fn tx_shutdown(
-    g: &Global,
-    log: &slog::Logger,
+    switchinfo: &crate::SwitchInfo,
+    iface_lock: &Mutex<Interface>,
     transport: &Transport,
-    name: &String,
 ) {
+    let log;
+
     let packet = {
-        let switchinfo = g.switchinfo.lock().unwrap().clone();
-        let iface_hash = g.interfaces.lock().unwrap();
-        let iface = get_interface!(iface_hash, name)
-            .expect("interface hash entry should persist until task exits");
+        let iface = iface_lock.lock().unwrap();
+        log = iface.log.clone();
+
         let status = iface
             .admin_status
             .unwrap_or_else(|| switchinfo.agent.admin_status);
@@ -387,6 +402,7 @@ async fn tx_shutdown(
 
         build_shutdown_packet(&switchinfo, &iface)
     };
+
     trace!(&log, "transmit shutdown LLDPDU");
     if let Err(e) = xmit_lldpdu(&transport, packet).await {
         error!(&log, "failed to xmit lldpdu"; "err" => e.to_string());
@@ -442,14 +458,13 @@ fn transport_init(iface: &String) -> LldpdResult<(Transport, AsyncFd<i32>)> {
 async fn interface_loop(
     g: Arc<Global>,
     name: String,
-    iface: String,
+    iface_lock: Arc<Mutex<Interface>>,
     mut msg_rx: mpsc::Receiver<InterfaceMsg>,
 ) {
-    let log = g.log.new(slog::o!(
-	"port" => name.to_string(),
-	"iface" => iface.to_string()));
+    let iface_name = iface_lock.lock().unwrap().iface.clone();
+    let log = iface_lock.lock().unwrap().log.clone();
 
-    let (transport, asyncfd) = match transport_init(&iface) {
+    let (transport, asyncfd) = match transport_init(&iface_name) {
         Ok((t, a)) => (t, a),
         Err(e) => {
             // TODO: add a "failed" state to interfaces in the hash so the
@@ -463,20 +478,59 @@ async fn interface_loop(
     let mut buf = [0u8; 4096];
     let mut next_tx = Instant::now();
     loop {
+        // Scan the neighbor list for any whose TTL has expired
+        {
+            let now = Utc::now();
+            let mut iface = iface_lock.lock().unwrap();
+            let expired: Vec<types::NeighborId> = iface
+                .neighbors
+                .iter()
+                .filter(|(_id, n)| {
+                    let ttl = Duration::from_secs(n.lldpdu.ttl as u64);
+                    n.last_seen + ttl < now
+                })
+                .map(|(id, _n)| id.clone())
+                .collect();
+
+            for id in &expired {
+                info!(iface.log, "neighbor {id:?} TTL expired");
+                iface.neighbors.remove(id);
+                iface.stats.ageouts_total += 1;
+            }
+        }
+
         // Is it time for another advertisement?
         if Instant::now() > next_tx {
-            let ticks = tx_lldpdu(&g, &log, &transport, &name).await;
+            let switchinfo = g.switchinfo.lock().unwrap().clone();
+            let ticks = tx_lldpdu(&switchinfo, &iface_lock, &transport).await;
             next_tx = Instant::now() + Duration::from_secs(ticks as u64);
         }
 
         match wait_for_event(&mut msg_rx, &asyncfd, next_tx).await {
             WakeupEvent::Message(msg) => match msg {
                 InterfaceMsg::TimeToGo => break,
+                // TODO-completeness: use the tx_credit mechanism to avoid
+                // spamming if we have a lot of updates in quick succession.
                 InterfaceMsg::UpdatedInfo => next_tx = Instant::now(),
             },
             WakeupEvent::FdReady => match transport.packet_recv(&mut buf) {
                 Ok(None) => { /* spurious wakeup? */ }
-                Ok(Some(n)) => handle_packet(&g, &log, &name, &buf[0..n]),
+                Ok(Some(n)) => {
+                    let switchinfo = g.switchinfo.lock().unwrap().clone();
+                    let mut iface = iface_lock.lock().unwrap();
+                    let old_neighbors = iface.neighbors.len();
+
+                    handle_packet(&switchinfo, &mut iface, &buf[0..n]);
+
+                    // If we discovered a new neighbor, we switch into fast_tx
+                    // mode and immediately send an LLDPDU.
+                    if old_neighbors < iface.neighbors.len() {
+                        iface.tx_fast = iface
+                            .tx_fast_init
+                            .unwrap_or_else(|| switchinfo.agent.tx_fast_init);
+                        next_tx = Instant::now();
+                    }
+                }
                 Err(LldpdError::TooSmall(_, b)) => {
                     warn!(log, "dropped excessively large packet: {b} bytes");
                 }
@@ -491,7 +545,9 @@ async fn interface_loop(
         }
     }
 
-    tx_shutdown(&g, &log, &transport, &name).await;
+    let switchinfo = g.switchinfo.lock().unwrap().clone();
+    tx_shutdown(&switchinfo, &iface_lock, &transport).await;
+
     debug!(log, "interface loop shutting down");
     let mut iface_hash = g.interfaces.lock().unwrap();
     iface_hash
@@ -505,7 +561,6 @@ pub async fn interface_add(
     name: String,
     chassis_id: Option<protocol::ChassisId>,
     port_id: Option<protocol::PortId>,
-    ttl: Option<u16>,
     system_name: Option<String>,
     system_description: Option<String>,
     port_description: Option<String>,
@@ -521,20 +576,19 @@ pub async fn interface_add(
         return Err(LldpdError::Exists("interface already added".into()));
     }
 
+    let log = global.log.new(slog::o!(
+	"port" => name.to_string(),
+	"iface" => iface.to_string()));
     let (msg_tx, msg_rx) = mpsc::channel(1);
     let global = global.clone();
-    let task_iface = iface.clone();
     let task_name = name.clone();
-    let _hdl = tokio::task::spawn(async move {
-        interface_loop(global, task_name, task_iface, msg_rx).await
-    });
 
     let interface = Interface {
+        log,
         iface,
         mac,
         chassis_id,
         port_id,
-        ttl,
         system_name,
         system_description,
         port_description,
@@ -555,183 +609,201 @@ pub async fn interface_add(
         tx_fast: 0,
     };
 
-    iface_hash.insert(name, Mutex::new(interface));
+    let iface_lock = Arc::new(Mutex::new(interface));
+    iface_hash.insert(name, iface_lock.clone());
 
+    let _hdl = tokio::task::spawn(async move {
+        interface_loop(global, task_name, iface_lock, msg_rx).await
+    });
+
+    Ok(())
+}
+
+/// Update a property belonging to an interface, and send the interface loop
+/// a message indicating the change.
+pub async fn update_interface(
+    g: &Global,
+    name: &String,
+    f: impl FnOnce(&mut Interface) -> LldpdResult<()>,
+) -> LldpdResult<()> {
+    let msg_tx = {
+        let iface = get_interface(g, name)?;
+        let mut iface = iface.lock().unwrap();
+        f(&mut iface)?;
+        iface.msg_tx.clone()
+    };
+
+    let _ = msg_tx.send(InterfaceMsg::UpdatedInfo).await;
     Ok(())
 }
 
 /// Add a single management addresses to an interface.
-pub fn addr_add(g: &Global, name: &String, addr: &IpAddr) -> LldpdResult<()> {
+pub async fn addr_add(
+    g: &Global,
+    name: &String,
+    addr: &IpAddr,
+) -> LldpdResult<()> {
     info!(g.log, "adding management address";
 	    "iface" => name, "addr" => addr.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-
-    if iface.management_addrs.is_none() {
-        iface.management_addrs = Some(BTreeSet::new());
-    }
-    iface
-        .management_addrs
-        .as_mut()
-        .expect("existence guaranteed above")
-        .insert(*addr);
-    Ok(())
+    update_interface(g, name, |iface| {
+        if iface.management_addrs.is_none() {
+            iface.management_addrs = Some(BTreeSet::new());
+        }
+        iface
+            .management_addrs
+            .as_mut()
+            .expect("existence guaranteed above")
+            .insert(*addr);
+        Ok(())
+    })
+    .await
 }
 
 /// Set the interface-local chassis id
-pub fn chassis_id_set(
+pub async fn chassis_id_set(
     g: &Global,
     name: &String,
     chassis_id: protocol::ChassisId,
 ) -> LldpdResult<()> {
     info!(g.log, "setting interface-level chassis ID";
 	    "iface" => name, "chassis_id" => chassis_id.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.chassis_id = Some(chassis_id);
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.chassis_id = Some(chassis_id);
+        Ok(())
+    })
+    .await
 }
 
 /// Clearing the interface-local chassis id
-pub fn chassis_id_del(g: &Global, name: &String) -> LldpdResult<()> {
+pub async fn chassis_id_del(g: &Global, name: &String) -> LldpdResult<()> {
     info!(g.log, "clearing interface-level chassis ID"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.chassis_id = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.chassis_id = None;
+        Ok(())
+    })
+    .await
 }
 
 /// Set the port id
-pub fn port_id_set(
+pub async fn port_id_set(
     g: &Global,
     name: &String,
     port_id: protocol::PortId,
 ) -> LldpdResult<()> {
     info!(g.log, "setting port ID";
 	    "iface" => name, "port_id" => port_id.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.port_id = port_id;
-    Ok(())
-}
-
-/// Set the interface-local ttl
-pub fn ttl_set(g: &Global, name: &String, ttl: u16) -> LldpdResult<()> {
-    info!(g.log, "setting interface-level port ID";
-	    "iface" => name, "ttl" => ttl);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.ttl = Some(ttl);
-    Ok(())
-}
-
-/// Clearing the interface-local ttl
-pub fn ttl_del(g: &Global, name: &String) -> LldpdResult<()> {
-    info!(g.log, "clearing interface-level port ID"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.ttl = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.port_id = port_id;
+        Ok(())
+    })
+    .await
 }
 
 /// Set the port description
-pub fn port_desc_set(
+pub async fn port_desc_set(
     g: &Global,
     name: &String,
     desc: &String,
 ) -> LldpdResult<()> {
     info!(g.log, "setting port description";
 	    "iface" => name, "port_desc" => desc.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.port_description = Some(desc.to_string());
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.port_description = Some(desc.to_string());
+        Ok(())
+    })
+    .await
 }
 
 /// Clearing the port description
-pub fn port_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
+pub async fn port_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
     info!(g.log, "clearing interface-level port ID"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.port_description = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.port_description = None;
+        Ok(())
+    })
+    .await
 }
 
 /// Set the interface-local system name
-pub fn system_name_set(
+pub async fn system_name_set(
     g: &Global,
     name: &String,
     sysname: &String,
 ) -> LldpdResult<()> {
     info!(g.log, "setting interface-level system name";
 	    "iface" => name, "sysname" =>sysname.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.system_name = Some(sysname.to_string());
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.system_name = Some(sysname.to_string());
+        Ok(())
+    })
+    .await
 }
 
 /// Clearing the interface-local system name
-pub fn system_name_del(g: &Global, name: &String) -> LldpdResult<()> {
+pub async fn system_name_del(g: &Global, name: &String) -> LldpdResult<()> {
     info!(g.log, "clearing interface-level port ID"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.system_name = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.system_name = None;
+        Ok(())
+    })
+    .await
 }
 
 /// Set the interface-local system name
-pub fn system_desc_set(
+pub async fn system_desc_set(
     g: &Global,
     name: &String,
     sysdesc: &String,
 ) -> LldpdResult<()> {
     info!(g.log, "setting interface-level system description";
 	    "iface" => name, "sysdesc" =>sysdesc.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.system_description = Some(sysdesc.to_string());
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.system_description = Some(sysdesc.to_string());
+        Ok(())
+    })
+    .await
 }
 
 /// Clearing the interface-local system description
-pub fn system_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
+pub async fn system_desc_del(g: &Global, name: &String) -> LldpdResult<()> {
     info!(g.log, "clearing interface-level system description"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.system_description = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.system_description = None;
+        Ok(())
+    })
+    .await
 }
 
 /// Remove a single management addresses from an interface.
-pub fn addr_delete(
+pub async fn addr_delete(
     g: &Global,
     name: &String,
     addr: &IpAddr,
 ) -> LldpdResult<()> {
     info!(g.log, "removing management address";
 	    "iface" => name, "addr" => addr.to_string());
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-
-    if let Some(addrs) = &mut iface.management_addrs {
-        if addrs.remove(addr) {
-            Ok(())
+    update_interface(g, name, |iface| {
+        if let Some(addrs) = &mut iface.management_addrs {
+            if addrs.remove(addr) {
+                Ok(())
+            } else {
+                Err(LldpdError::Missing(format!("no such address: {addr}")))
+            }
         } else {
-            Err(LldpdError::Missing(format!("no such address: {addr}")))
+            Err(LldpdError::Missing(
+                "no interface-local addresses".to_string(),
+            ))
         }
-    } else {
-        Err(LldpdError::Missing(
-            "no interface-local addresses".to_string(),
-        ))
-    }
+    })
+    .await
 }
 
 /// Remove all management addresses on an interface.
-pub fn addr_delete_all(g: &Global, name: &String) -> LldpdResult<()> {
+pub async fn addr_delete_all(g: &Global, name: &String) -> LldpdResult<()> {
     info!(g.log, "removing all management addresses"; "iface" => name);
-    let iface_hash = g.interfaces.lock().unwrap();
-    let mut iface = get_interface!(iface_hash, name)?;
-    iface.management_addrs = None;
-    Ok(())
+    update_interface(g, name, |iface| {
+        iface.management_addrs = None;
+        Ok(())
+    })
+    .await
 }
