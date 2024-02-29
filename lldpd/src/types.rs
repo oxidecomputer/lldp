@@ -176,18 +176,13 @@ impl Default for Agent {
 }
 
 /// Whether the agent should be sending, receiving, or both.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum AdminStatus {
+    #[default]
     EnabledRxTx,
     EnabledRxOnly,
     EnabledTxOnly,
     Disabled,
-}
-
-impl Default for AdminStatus {
-    fn default() -> Self {
-        AdminStatus::EnabledRxTx
-    }
 }
 
 impl AdminStatus {

@@ -228,14 +228,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         .await
         .expect("while shutting down the api_server_manager");
 
-    debug!(&log, "shutting down interface tasks");
-    for iface in global.interfaces.lock().unwrap().values() {
-        iface.lock().unwrap().shutdown().await;
-    }
-    debug!(&log, "waiting for tasks to exit");
-    while !global.interfaces.lock().unwrap().is_empty() {
-        let _ = tokio::time::sleep(std::time::Duration::from_millis(10));
-    }
+    interfaces::shutdown_all(&global).await;
 
     info!(&log, "exiting");
     Ok(())
