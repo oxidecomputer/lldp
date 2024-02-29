@@ -4,16 +4,18 @@
 
 // Copyright 2024 Oxide Computer Company
 
-use std::convert;
 use std::fmt;
 
+use chrono::DateTime;
+use chrono::Utc;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::errors;
 use crate::protocol;
 
-pub type LldpdResult<T> = Result<T, LldpdError>;
+pub type LldpdResult<T> = Result<T, errors::LldpdError>;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct SystemInfo {
@@ -83,105 +85,113 @@ impl From<&protocol::Lldpdu> for SystemInfo {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum LldpdError {
-    /// The daemon attempted to perform a task the required contacting dpd without
-    /// being connected to a dpd instance.
-    #[error("Not connected to dpd daemon")]
-    NoDpd,
-    /// An error received during a dpd-client operation
-    #[error("dpd error: {0:?}")]
-    DpdClientError(String),
-    #[error("I/O error: {0:?}")]
-    Io(std::io::Error),
-    #[error("Resource already exists: {0}")]
-    Exists(String),
-    #[error("No such resource: {0}")]
-    Missing(String),
-    #[error("Invalid argument: {0}")]
-    Invalid(String),
-    #[error("LLDP protocol error: {0}")]
-    Protocol(String),
-    #[error("buffer too small for incoming packet. have: {0}  need: {1}")]
-    TooSmall(usize, usize),
-    #[error("SMF error: {0}")]
-    Smf(String),
-    #[error("Pcap error: {0}")]
-    Pcap(String),
-    #[error("DLPI error: {0}")]
-    Dlpi(String),
-    #[error("error: {0}")]
-    Other(String),
+/// This struct is used to record information about a neighbor whose
+/// advertisements we have received.
+#[derive(Clone, Debug)]
+pub struct Neighbor {
+    /// When the neighbor was first seen.  Note: this is reset if the
+    /// neighbor's TTL expires and we subsequently rediscover it.
+    pub first_seen: DateTime<Utc>,
+    /// When we last received an advertisement from this system.
+    pub last_seen: DateTime<Utc>,
+    /// When the data advertised by this system last changed
+    pub last_changed: DateTime<Utc>,
+
+    /// The latest advertised data received from this neighbor
+    pub lldpdu: protocol::Lldpdu,
 }
 
-#[cfg(feature = "smf")]
-impl From<crucible_smf::ScfError> for LldpdError {
-    fn from(e: crucible_smf::ScfError) -> Self {
-        Self::Smf(format!("{e}"))
-    }
-}
+impl Neighbor {
+    pub fn from_lldpdu(lldpdu: &protocol::Lldpdu) -> Self {
+        let now = Utc::now();
 
-impl convert::From<std::io::Error> for LldpdError {
-    fn from(err: std::io::Error) -> Self {
-        LldpdError::Io(err)
-    }
-}
-
-impl convert::From<LldpdError> for dropshot::HttpError {
-    fn from(o: LldpdError) -> dropshot::HttpError {
-        match o {
-            LldpdError::NoDpd => dropshot::HttpError::for_internal_error(
-                "not connected to dpd".to_string(),
-            ),
-            LldpdError::DpdClientError(e) => {
-                dropshot::HttpError::for_internal_error(format!(
-                    "dpd client error: {e}"
-                ))
-            }
-            LldpdError::Io(e) => {
-                dropshot::HttpError::for_internal_error(e.to_string())
-            }
-            LldpdError::Exists(e) => dropshot::HttpError::for_status(
-                Some(e),
-                http::StatusCode::CONFLICT,
-            ),
-            LldpdError::Missing(e) => dropshot::HttpError::for_status(
-                Some(e),
-                http::StatusCode::NOT_FOUND,
-            ),
-            LldpdError::Invalid(e) => {
-                dropshot::HttpError::for_bad_request(None, e)
-            }
-            LldpdError::Protocol(e) => {
-                dropshot::HttpError::for_bad_request(None, e)
-            }
-            LldpdError::TooSmall(_, _) => {
-                dropshot::HttpError::for_internal_error(
-                    "internal buffer exceeded".to_string(),
-                )
-            }
-            LldpdError::Pcap(e) => dropshot::HttpError::for_internal_error(e),
-            LldpdError::Dlpi(e) => dropshot::HttpError::for_internal_error(e),
-            LldpdError::Smf(e) => dropshot::HttpError::for_internal_error(e),
-            LldpdError::Other(e) => dropshot::HttpError::for_internal_error(e),
+        Neighbor {
+            first_seen: now,
+            last_seen: now,
+            last_changed: now,
+            lldpdu: lldpdu.clone(),
         }
     }
 }
 
-impl convert::From<String> for LldpdError {
-    fn from(err: String) -> Self {
-        LldpdError::Other(err)
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NeighborId {
+    pub chassis_id: protocol::ChassisId,
+    pub port_id: protocol::PortId,
+}
+
+impl NeighborId {
+    pub fn new(lldpdu: &protocol::Lldpdu) -> Self {
+        NeighborId {
+            chassis_id: lldpdu.chassis_id.clone(),
+            port_id: lldpdu.port_id.clone(),
+        }
     }
 }
 
-impl convert::From<&str> for LldpdError {
-    fn from(err: &str) -> Self {
-        LldpdError::Other(err.to_string())
+/// This structure contains some of the global state described in section 9.2.5
+/// of the standard.  This structure contains those values that can be
+/// configured by an administrator, while the values that are updated
+/// dynamically are all stored in per-interface structs.
+#[derive(Clone, Debug)]
+pub struct Agent {
+    /// Whether the agent should be sending, receiving, or both.
+    pub admin_status: AdminStatus,
+    /// How quickly to resend LLDPDUs during fast tx periods.
+    /// Measured in ticks from 1-3600.
+    pub msg_fast_tx: u16,
+    /// Multiplier of msg_tx_interval, used to calculate TTL.  Legal values
+    /// are 1-100.
+    pub msg_tx_hold: u16,
+    /// Time between LLDPDU transmissions during normal tx periods.
+    /// Measured in ticks from 1-3600.
+    pub msg_tx_interval: u16,
+    /// After becoming disabled, time in seconds to wait before attempting
+    /// reinitialization.
+    pub reinit_delay: u16,
+    /// Maximum value of the per-interface tx_credit
+    pub tx_credit_max: u16,
+    /// Initial value of the per-interface tx_fast
+    pub tx_fast_init: u16,
+}
+
+impl Default for Agent {
+    /// Returns an Agent struct with all fields set as recommended by the
+    /// standard
+    fn default() -> Self {
+        Agent {
+            admin_status: AdminStatus::default(),
+            msg_fast_tx: 1,
+            msg_tx_hold: 4,
+            msg_tx_interval: 30,
+            reinit_delay: 2,
+            tx_credit_max: 5,
+            tx_fast_init: 4,
+        }
     }
 }
 
-impl convert::From<anyhow::Error> for LldpdError {
-    fn from(err: anyhow::Error) -> Self {
-        LldpdError::Other(err.to_string())
+/// Whether the agent should be sending, receiving, or both.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdminStatus {
+    EnabledRxTx,
+    EnabledRxOnly,
+    EnabledTxOnly,
+    Disabled,
+}
+
+impl Default for AdminStatus {
+    fn default() -> Self {
+        AdminStatus::EnabledRxTx
+    }
+}
+
+impl AdminStatus {
+    pub fn has_rx(self) -> bool {
+        self == AdminStatus::EnabledRxTx || self == AdminStatus::EnabledRxOnly
+    }
+
+    pub fn has_tx(self) -> bool {
+        self == AdminStatus::EnabledRxTx || self == AdminStatus::EnabledTxOnly
     }
 }

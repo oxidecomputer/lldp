@@ -34,8 +34,8 @@ use slog::o;
 use crate::interfaces;
 use crate::protocol;
 use crate::types;
-use crate::types::LldpdError;
 use crate::Global;
+use crate::LldpdError;
 
 type ApiServer = dropshot::HttpServer<Arc<Global>>;
 
@@ -732,17 +732,28 @@ async fn get_neighbors(
     rqctx: RequestContext<Arc<Global>>,
 ) -> Result<HttpResponseOk<Vec<Neighbor>>, HttpError> {
     let global: &Global = rqctx.context();
-    let n = global.neighbors.lock().unwrap();
     Ok(HttpResponseOk(
-        n.values()
-            .map(|n| Neighbor {
-                port: n.interface.clone(),
-                first_seen: n.first_seen,
-                last_seen: n.last_seen,
-                last_changed: n.last_changed,
-                system_info: (&n.lldpdu).into(),
+        global
+            .interfaces
+            .lock()
+            .unwrap()
+            .iter()
+            .flat_map(|(name, iface)| {
+                iface
+                    .lock()
+                    .unwrap()
+                    .neighbors
+                    .values()
+                    .map(|n| Neighbor {
+                        port: name.clone(),
+                        first_seen: n.first_seen,
+                        last_seen: n.last_seen,
+                        last_changed: n.last_changed,
+                        system_info: (&n.lldpdu).into(),
+                    })
+                    .collect::<Vec<Neighbor>>()
             })
-            .collect(),
+            .collect::<Vec<Neighbor>>(),
     ))
 }
 

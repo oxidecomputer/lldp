@@ -13,8 +13,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::errors::LldpdError;
 use crate::packet::LldpTlv;
-use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use common::MacAddr;
 

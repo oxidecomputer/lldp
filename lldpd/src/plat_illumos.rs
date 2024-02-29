@@ -7,9 +7,9 @@
 use std::collections::BTreeMap;
 use tokio::process::Command;
 
-use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use crate::Global;
+use crate::LldpdError;
 use common::MacAddr;
 
 const DLADM: &str = "/usr/sbin/dladm";

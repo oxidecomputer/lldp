@@ -17,16 +17,14 @@ use slog::debug;
 use slog::info;
 use structopt::StructOpt;
 
+use errors::LldpdError;
 use interfaces::Interface;
-use neighbors::Neighbor;
-use neighbors::NeighborId;
-use types::LldpdError;
 use types::LldpdResult;
 
 mod agent;
 mod api_server;
+mod errors;
 mod interfaces;
-mod neighbors;
 mod packet;
 mod protocol;
 mod types;
@@ -56,9 +54,8 @@ pub struct Global {
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
     /// List of interfaces we are managing
     pub interfaces: Mutex<BTreeMap<String, Mutex<Interface>>>,
-    /// All of the neighbors we are tracking
-    pub neighbors: Mutex<BTreeMap<NeighborId, Neighbor>>,
 }
+
 unsafe impl Send for Global {}
 unsafe impl Sync for Global {}
 
@@ -75,7 +72,6 @@ impl Global {
             switchinfo: Mutex::new(switchinfo),
             listen_addresses: Mutex::new(Vec::new()),
             interfaces: Mutex::new(BTreeMap::new()),
-            neighbors: Mutex::new(BTreeMap::new()),
         }
     }
 }
@@ -86,7 +82,7 @@ pub struct SwitchInfo {
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub management_addrs: BTreeSet<IpAddr>,
-    pub agent: agent::Agent,
+    pub agent: types::Agent,
 }
 
 #[derive(Debug, StructOpt)]
@@ -198,7 +194,7 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
         system_name: Some(system_name),
         system_description: Some(system_description),
         management_addrs: BTreeSet::new(),
-        agent: agent::Agent::default(),
+        agent: types::Agent::default(),
     }
 }
 

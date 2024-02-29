@@ -6,7 +6,7 @@
 
 use common::MacAddr;
 
-use crate::types::LldpdError;
+use crate::errors::LldpdError;
 use crate::types::LldpdResult;
 
 pub const ETHER_VLAN: u16 = 0x8100;

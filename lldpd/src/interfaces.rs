@@ -4,6 +4,8 @@
 
 // Copyright 2024 Oxide Computer Company
 
+use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -12,6 +14,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::anyhow;
+use chrono::Utc;
 use slog::debug;
 use slog::error;
 use slog::info;
@@ -20,11 +23,11 @@ use slog::warn;
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
-use crate::neighbors;
+use crate::errors::LldpdError;
 use crate::packet::LldpTlv;
 use crate::packet::Packet;
 use crate::protocol;
-use crate::types::LldpdError;
+use crate::types;
 use crate::types::LldpdResult;
 use crate::Global;
 use common::MacAddr;
@@ -46,19 +49,22 @@ pub struct Interface {
     pub iface: String,
     pub mac: MacAddr,
 
+    /// Configurable properties
     pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: protocol::PortId,
     pub ttl: Option<u16>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
-
     pub management_addrs: Option<BTreeSet<IpAddr>>,
 
+    /// Counters of packets in, packets out, etc.
     pub stats: Stats,
 
+    /// Neighbors we are currently aware of
+    pub neighbors: BTreeMap<types::NeighborId, types::Neighbor>,
+
     msg_tx: mpsc::Sender<InterfaceMsg>,
-    task_hdl: Option<tokio::task::JoinHandle<()>>,
 
     /// The values below are settings defined in section 9.2.5 of the standard.
     /// We support changing these settings are either the interface level or
@@ -66,7 +72,7 @@ pub struct Interface {
     /// the system-level setting defined in the Agent structure.
 
     /// Whether the agent should be sending, receiving, or both.
-    admin_status: Option<crate::agent::AdminStatus>,
+    admin_status: Option<types::AdminStatus>,
     /// How quickly to resend LLDPDUs during fast tx periods.
     /// Measured in ticks from 1-3600.
     msg_fast_tx: Option<u16>,
@@ -127,11 +133,14 @@ pub enum InterfaceMsg {
 }
 
 impl Interface {
+    /// Ask the interface loop to shut itself down and clean up after itself.
     pub async fn shutdown(&mut self) {
         let _ = self.msg_tx.send(InterfaceMsg::TimeToGo).await;
     }
 }
 
+// Convenience macro to look for an interface in the hash and return a
+// consistent error if it's not found.
 macro_rules! get_interface {
     ($hash:ident, $name:ident) => {
         $hash
@@ -143,6 +152,8 @@ macro_rules! get_interface {
     };
 }
 
+// Construct an LLDPDU structure with all of the information we have about this
+// interface
 pub fn build_lldpdu(
     switchinfo: &crate::SwitchInfo,
     iface: &Interface,
@@ -152,10 +163,13 @@ pub fn build_lldpdu(
         None => switchinfo.chassis_id.clone(),
     };
 
+    // TODO-completeness: the available and enabled capabilities should be
+    // configurable - not just hardcoded as "Router".
     let mut avail = BTreeSet::new();
     avail.insert(protocol::SystemCapabilities::Router);
     let enabled = avail.clone();
 
+    // XXX: this can be done more neatly with iter().map().collect()
     let mut management_addresses = Vec::new();
     let addrs = iface
         .management_addrs
@@ -190,6 +204,8 @@ pub fn build_lldpdu(
     }
 }
 
+// Construct an LLDPDU packet with all of the data we want to communicate about
+// this interface
 fn build_lldpdu_packet(
     switchinfo: &crate::SwitchInfo,
     iface: &Interface,
@@ -206,6 +222,8 @@ fn build_lldpdu_packet(
     packet
 }
 
+// Construct an LLDPDU packet with a TTL of 0 to notify neighbors that this interface
+// is going away immediately.
 fn build_shutdown_packet(
     switchinfo: &crate::SwitchInfo,
     iface: &Interface,
@@ -227,12 +245,14 @@ fn build_shutdown_packet(
     packet
 }
 
+// Transmit a single packet on the provided transport
 async fn xmit_lldpdu(transport: &Transport, packet: Packet) -> LldpdResult<()> {
     transport
         .packet_send(&packet.deparse())
         .map_err(|e| anyhow!("failed to send lldpdu: {:?}", e).into())
 }
 
+// Bump error statistics when receiving a bad packet
 fn error_accounting(g: &Global, name: &str, _error: LldpdError) {
     let iface_hash = g.interfaces.lock().unwrap();
     let mut iface = get_interface!(iface_hash, name)
@@ -241,39 +261,71 @@ fn error_accounting(g: &Global, name: &str, _error: LldpdError) {
     iface.stats.frames_discarded_total += 1;
 }
 
+// Process a single packet that arrived on our transport.
 fn handle_packet(g: &Global, log: &slog::Logger, name: &str, data: &[u8]) {
+    // Given a raw packet, extract the ethernet and LLDP headers and drop
+    // anything else.
     let packet = match Packet::parse(data) {
         Ok(Some(packet)) => packet,
-        Ok(None) => return,
+        Ok(None) => return, // non-LLDP packet
         Err(e) => {
             debug!(log, "failed to parse packet: {:?}", e);
             return error_accounting(g, name, e);
         }
     };
 
-    if packet.lldp_hdr.lldp_data.is_empty() {
-        debug!(log, "found packet with LLDP ethertype but no header");
-        return error_accounting(
-            g,
-            name,
-            LldpdError::Protocol("missing header".to_string()),
-        );
-    }
-
-    match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
-        Ok(lldpdu) => {
-            trace!(log, "handling incoming LLDPDU");
-            crate::neighbors::incoming_lldpdu(g, name, lldpdu)
-        }
+    // Parse each of the TLVs in the LLDP header trying to build a valid LLDPDU
+    // structure.
+    let lldpdu = match Lldpdu::try_from(&packet.lldp_hdr.lldp_data) {
+        Ok(lldpdu) => lldpdu,
         Err(e) => {
             error!(log, "parsing LLDP packet failed: {e:?}");
-            error_accounting(g, name, e);
+            // TODO-completeness: examine the error details to detect the
+            // specific failure modes for which the spec has counters.
+            return error_accounting(g, name, e);
         }
+    };
+
+    let id = types::NeighborId::new(&lldpdu);
+    let switchinfo = g.switchinfo.lock().unwrap().clone();
+    let iface_hash = g.interfaces.lock().unwrap();
+    let mut iface = get_interface!(iface_hash, name)
+        .expect("interface hash entry should persist until task exits");
+
+    // If one of our own LLDPDUs was reflected back to us, drop it
+    if match &iface.chassis_id {
+        Some(chassis_id) => chassis_id == &lldpdu.chassis_id,
+        None => switchinfo.chassis_id == lldpdu.chassis_id,
+    } {
+        trace!(log, "ignoring our own lldpdu for {id:?}");
+        return;
     }
+
+    // Is this is new neighbor, an update from an old neighbor, or just a
+    // periodic re-advertisement of the same old stuff?
+    match iface.neighbors.entry(id.clone()) {
+        Entry::Vacant(e) => {
+            let sysinfo: types::SystemInfo = (&lldpdu).into();
+            let neighbor = types::Neighbor::from_lldpdu(&lldpdu);
+            info!(log, "new neighbor {:?}: {}", id, &sysinfo);
+            e.insert(neighbor);
+        }
+        Entry::Occupied(old) => {
+            let now = Utc::now();
+            let old = old.into_mut();
+            old.last_seen = now;
+            if old.lldpdu != lldpdu {
+                let sysinfo: types::SystemInfo = (&lldpdu).into();
+                info!(log, "updated neighbor {:?}: {}", id, &sysinfo);
+                old.last_changed = now;
+                old.lldpdu = lldpdu;
+            }
+        }
+    };
 }
 
 // Construct and transmit an LLDPDU on this interface.  Return the number of
-// ticks to delay before issing the next one.
+// ticks to delay before issuing the next one.
 async fn tx_lldpdu(
     g: &Global,
     log: &slog::Logger,
@@ -360,13 +412,17 @@ async fn wait_for_event(
         timeout - now
     };
 
+    #[rustfmt::skip]
     tokio::select! {
-        msg = msg_rx.recv() => WakeupEvent::Message(msg.expect("channel shouldn't be dropped while the interface thead is alive")),
-    _= asyncfd.readable() => WakeupEvent::FdReady,
-    _ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
+	msg = msg_rx.recv() => WakeupEvent::Message(msg
+	      .expect("channel shouldn't be dropped while the interface thread is alive")),
+	_ = asyncfd.readable() => WakeupEvent::FdReady,
+	_ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
     }
 }
 
+// Open a transport (DLPI or pcap) on an interface and return a file descriptor
+// that tokio can poll() on.
 fn transport_init(iface: &String) -> LldpdResult<(Transport, AsyncFd<i32>)> {
     let transport = plat::Transport::new(&iface)?;
     transport.get_poll_fd().and_then(|fd| {
@@ -407,6 +463,7 @@ async fn interface_loop(
     let mut buf = [0u8; 4096];
     let mut next_tx = Instant::now();
     loop {
+        // Is it time for another advertisement?
         if Instant::now() > next_tx {
             let ticks = tx_lldpdu(&g, &log, &transport, &name).await;
             next_tx = Instant::now() + Duration::from_secs(ticks as u64);
@@ -442,20 +499,6 @@ async fn interface_loop(
         .expect("interface hash entry should persist until task exits");
 }
 
-pub fn neighbor_id_match(g: &Global, id: &neighbors::NeighborId) -> bool {
-    let chassis_id = g.switchinfo.lock().unwrap().chassis_id.clone();
-    g.interfaces
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(name, _iface)| name == &&id.interface)
-        .any(|(_name, iface)| {
-            let iface = iface.lock().unwrap();
-            let chassis_id = iface.chassis_id.as_ref().unwrap_or(&chassis_id);
-            id.port_id == iface.port_id && &id.chassis_id == chassis_id
-        })
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn interface_add(
     global: &Arc<Global>,
@@ -482,7 +525,7 @@ pub async fn interface_add(
     let global = global.clone();
     let task_iface = iface.clone();
     let task_name = name.clone();
-    let task_hdl = tokio::task::spawn(async move {
+    let _hdl = tokio::task::spawn(async move {
         interface_loop(global, task_name, task_iface, msg_rx).await
     });
 
@@ -497,9 +540,10 @@ pub async fn interface_add(
         port_description,
         management_addrs: None,
         msg_tx,
-        task_hdl: Some(task_hdl),
 
         stats: Stats::default(),
+        neighbors: BTreeMap::new(),
+
         admin_status: None,
         msg_fast_tx: None,
         msg_tx_hold: None,
