@@ -4,9 +4,9 @@
 
 // Copyright 2024 Oxide Computer Company
 
-use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use crate::Global;
+use crate::LldpdError;
 use common::MacAddr;
 
 mod pcap {
