@@ -7,9 +7,9 @@
 use slog::error;
 use slog::info;
 
-use crate::types::LldpdError;
 use crate::types::LldpdResult;
 use crate::Global;
+use crate::LldpdError;
 use common::ports::PortId;
 use common::MacAddr;
 use dpd_client::types::LinkId;

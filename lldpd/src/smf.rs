@@ -10,8 +10,8 @@ use slog::debug;
 use slog::error;
 
 use crate::protocol::ChassisId;
-use crate::types::LldpdError;
 use crate::types::LldpdResult;
+use crate::LldpdError;
 
 // Given a property name within a group, return all the associated values as
 // a vec of strings.
