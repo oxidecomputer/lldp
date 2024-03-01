@@ -1,0 +1,1527 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Oxide LLDP Daemon",
+    "description": "API for managing the LLDP daemon",
+    "contact": {
+      "url": "https://oxide.computer",
+      "email": "api@oxide.computer"
+    },
+    "version": "0.0.1"
+  },
+  "paths": {
+    "/build-info": {
+      "get": {
+        "summary": "Return detailed build information about the `dpd` server itself.",
+        "operationId": "build_info",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildInfo"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface": {
+      "get": {
+        "operationId": "interface_list",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Array_of_Interface",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Interface"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}": {
+      "get": {
+        "operationId": "interface_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Interface"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "interface_add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterfaceAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "successful creation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Null",
+                  "type": "string",
+                  "enum": [
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/chassis_id": {
+      "post": {
+        "operationId": "interface_set_chassis_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChassisId"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_chassis_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/enabled_capability/{capability}": {
+      "post": {
+        "operationId": "interface_enable_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_disable_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/management_address": {
+      "delete": {
+        "operationId": "interface_clear_management_addr",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/management_address/{address}": {
+      "post": {
+        "operationId": "interface_add_management_addr",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "description": "Management Address to advertise on this port",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_management_addr",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "description": "Management Address to advertise on this port",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/port_description": {
+      "post": {
+        "operationId": "interface_set_port_description",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "String",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_port_description",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/port_id": {
+      "post": {
+        "operationId": "interface_set_port_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortId"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/system_capability/{capability}": {
+      "post": {
+        "operationId": "interface_add_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/system_description": {
+      "post": {
+        "operationId": "interface_set_system_description",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "String",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_system_description",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/interface/{iface}/system_name": {
+      "post": {
+        "operationId": "interface_set_system_name",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "String",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "interface_del_system_name",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/neighbors": {
+      "get": {
+        "summary": "Return a list of the active neighbors",
+        "operationId": "get_neighbors",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Array_of_Neighbor",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Neighbor"
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/chassis_id": {
+      "post": {
+        "summary": "Set the default chassis ID advertised on all ports",
+        "operationId": "sys_set_chassis_id",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChassisId"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/enabled_capability/{capability}": {
+      "post": {
+        "summary": "Add a capability to the set of those advertised as enabled on all interfaces",
+        "operationId": "sys_enable_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a capability from the set of those advertised as enabled on all interfaces",
+        "operationId": "sys_disable_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/management_address": {
+      "delete": {
+        "summary": "Remove all management addresses from the set of those advertised on all",
+        "description": "interfaces",
+        "operationId": "sys_clear_management_addr",
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/management_address/{address}": {
+      "post": {
+        "summary": "Add a management address to the set of those advertised on all interfaces",
+        "operationId": "sys_add_management_addr",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a management address from the set of those advertised on all interfaces",
+        "operationId": "sys_del_management_addr",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "ip"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/system_capability/{capability}": {
+      "post": {
+        "summary": "Add a capability to the set of those advertised on all interfaces",
+        "operationId": "sys_add_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a capability from the set of those advertised on all interfaces",
+        "operationId": "sys_del_system_capability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/system_description": {
+      "post": {
+        "summary": "Set the default system description advertised on all interfaces",
+        "operationId": "sys_set_system_description",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "String",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete default system description advertised on all interfaces.  A system name will",
+        "description": "only be advertised on those interfaces with a locally set system description.",
+        "operationId": "sys_del_system_description",
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/system/system_name": {
+      "post": {
+        "summary": "Set the default system name advertised on all ports",
+        "operationId": "sys_set_system_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "String",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete default system name advertised on all ports.  A system name will",
+        "description": "only be advertised on those interfaces with a locally set system name.",
+        "operationId": "sys_del_system_name",
+        "responses": {
+          "204": {
+            "description": "successful deletion"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BuildInfo": {
+        "description": "Detailed build information about `lldpd`.",
+        "type": "object",
+        "properties": {
+          "cargo_triple": {
+            "type": "string"
+          },
+          "debug": {
+            "type": "boolean"
+          },
+          "git_branch": {
+            "type": "string"
+          },
+          "git_commit_timestamp": {
+            "type": "string"
+          },
+          "git_sha": {
+            "type": "string"
+          },
+          "opt_level": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0
+          },
+          "rustc_channel": {
+            "type": "string"
+          },
+          "rustc_commit_sha": {
+            "type": "string"
+          },
+          "rustc_host_triple": {
+            "type": "string"
+          },
+          "rustc_semver": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cargo_triple",
+          "debug",
+          "git_branch",
+          "git_commit_timestamp",
+          "git_sha",
+          "opt_level",
+          "rustc_channel",
+          "rustc_commit_sha",
+          "rustc_host_triple",
+          "rustc_semver",
+          "version"
+        ]
+      },
+      "ChassisId": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ChassisComponent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ChassisComponent"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "InterfaceAlias": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "InterfaceAlias"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "PortComponent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "PortComponent"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "MacAddress": {
+                "$ref": "#/components/schemas/MacAddr"
+              }
+            },
+            "required": [
+              "MacAddress"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "NetworkAddress": {
+                "type": "string",
+                "format": "ip"
+              }
+            },
+            "required": [
+              "NetworkAddress"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "InterfaceName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "InterfaceName"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "LocallyAssigned": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "LocallyAssigned"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Error": {
+        "description": "Error information from a response.",
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "request_id"
+        ]
+      },
+      "Interface": {
+        "description": "A local interface on which we are listening for, and dispatching, LLDPDUs",
+        "type": "object",
+        "properties": {
+          "iface": {
+            "type": "string"
+          },
+          "port": {
+            "type": "string"
+          },
+          "system_info": {
+            "$ref": "#/components/schemas/SystemInfo"
+          }
+        },
+        "required": [
+          "iface",
+          "port",
+          "system_info"
+        ]
+      },
+      "InterfaceAdd": {
+        "description": "Optional arguments when adding an interface to LLDPD.  Any argument left unspecified will be assigned the default values for this system.",
+        "type": "object",
+        "properties": {
+          "chassis_id": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ChassisId"
+              }
+            ]
+          },
+          "port_description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "port_id": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PortId"
+              }
+            ]
+          },
+          "system_description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "system_name": {
+            "nullable": true,
+            "type": "string"
+          }
+        }
+      },
+      "InterfaceNum": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "Unknown": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "Unknown"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "IfIndex": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "IfIndex"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "PortNumber": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "PortNumber"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "MacAddr": {
+        "description": "An EUI-48 MAC address, used for layer-2 addressing.",
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0
+            },
+            "minItems": 6,
+            "maxItems": 6
+          }
+        },
+        "required": [
+          "a"
+        ]
+      },
+      "ManagementAddress": {
+        "type": "object",
+        "properties": {
+          "addr": {
+            "type": "string",
+            "format": "ip"
+          },
+          "interface_num": {
+            "$ref": "#/components/schemas/InterfaceNum"
+          },
+          "oid": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "addr",
+          "interface_num"
+        ]
+      },
+      "Neighbor": {
+        "description": "A remote system that has been discovered on one of our configured interfaces",
+        "type": "object",
+        "properties": {
+          "first_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_changed": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "port": {
+            "type": "string"
+          },
+          "system_info": {
+            "$ref": "#/components/schemas/SystemInfo"
+          }
+        },
+        "required": [
+          "first_seen",
+          "last_changed",
+          "last_seen",
+          "port",
+          "system_info"
+        ]
+      },
+      "PortId": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "InterfaceAlias": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "InterfaceAlias"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "PortComponent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "PortComponent"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "MacAddress": {
+                "$ref": "#/components/schemas/MacAddr"
+              }
+            },
+            "required": [
+              "MacAddress"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "NetworkAddress": {
+                "type": "string",
+                "format": "ip"
+              }
+            },
+            "required": [
+              "NetworkAddress"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "InterfaceName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "InterfaceName"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "AgentCircuitId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "AgentCircuitId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "LocallyAssigned": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "LocallyAssigned"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SystemCapabilities": {
+        "description": "System Capabilities are defined by table 8-4.  In an LLDPDU a system's available and enabled capabilities are represented by bitmasks, with the value below acting as the index into that bitmask.",
+        "type": "string",
+        "enum": [
+          "Other",
+          "Repeater",
+          "MacBridgeComponent",
+          "AccessPoint",
+          "Router",
+          "Telephone",
+          "Docsis",
+          "StationOnly",
+          "CVlanComponent",
+          "SVlanComponent",
+          "MacRelayComponent"
+        ]
+      },
+      "SystemInfo": {
+        "type": "object",
+        "properties": {
+          "capabilities_available": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          "capabilities_enabled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SystemCapabilities"
+            }
+          },
+          "chassis_id": {
+            "$ref": "#/components/schemas/ChassisId"
+          },
+          "management_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManagementAddress"
+            }
+          },
+          "organizationally_specific": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "port_description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "port_id": {
+            "$ref": "#/components/schemas/PortId"
+          },
+          "system_description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "system_name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "ttl": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "capabilities_available",
+          "capabilities_enabled",
+          "chassis_id",
+          "management_addresses",
+          "organizationally_specific",
+          "port_id",
+          "ttl"
+        ]
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+[workspace]
+
+members = [
+	"adm",
+	"common",
+	"lldpd-client",
+	"lldpd",
+	"xtask",
+]
+
+resolver = "2"
+
+[workspace.dependencies]
+
+# intra-package dependencies
+lldpd-client = { path = "lldpd-client" }
+common = { path = "common" }
+
+# oxide dependencies from github
+progenitor = { git = "https://github.com/oxidecomputer/progenitor", branch = "main"}
+omicron-zone-package = "0.7.1"
+
+# public dependencies from crates.io
+anyhow = "1.0"
+chrono = "0.4"
+dropshot = "0.10.0"
+futures = "0.3"
+http = "0.2.9"
+reqwest = "0.11"
+schemars = "0.8"
+semver = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = [ "futures-v0_3" ] }
+slog = { version = "2.7", features = [ "release_max_level_debug", "max_level_trace" ] }
+slog-async = "2.6"
+slog-bunyan = "2.4"
+slog-term = "2.6"
+structopt = "0.3"
+thiserror = "1.0"
+tokio = { version = "1.24", features = ["full"]}

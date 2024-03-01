@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+omicron-zone-package.workspace = true
+structopt.workspace = true
+tokio.workspace = true

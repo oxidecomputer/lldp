@@ -1,0 +1,44 @@
+[package]
+name = "lldpd"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[features]
+dendrite = [ "dep:dpd-client" ]
+smf = [ "dep:crucible-smf" ]
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+common.workspace = true
+dropshot.workspace = true
+http.workspace = true
+signal-hook.workspace = true
+serde.workspace = true
+schemars.workspace = true
+slog.workspace = true
+structopt.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[target.'cfg(target_os = "illumos")'.dependencies]
+dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
+
+[dependencies.dpd-client]
+path = "../dpd-client"
+optional = true
+
+[dependencies.crucible-smf]
+git = "https://github.com/oxidecomputer/crucible"
+rev = "9bcd80c3392d2f0128ef1ac5aa13036d268a8e8e"
+optional = true
+
+[build-dependencies]
+anyhow.workspace = true
+cc = "1.0"
+bindgen = "0.64"
+
+[build-dependencies.vergen]
+version = "8.0"
+features = [ "cargo", "git", "git2", "rustc" ]
