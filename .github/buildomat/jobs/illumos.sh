@@ -9,23 +9,23 @@
 #: ]
 #:
 #: [[publish]]
-#: series = "illumos"
+#: series = "image"
 #: name = "lldp.p5p"
 #: from_output = "/out/lldp.p5p"
 #:
 #: [[publish]]
-#: series = "illumos"
+#: series = "image"
 #: name = "lldp.p5p.sha256.txt"
 #: from_output = "/out/lldp.p5p.sha256.txt"
 #:
 #: [[publish]]
-#: series = "illumos"
-#: name = "lldp-asic.tar.gz"
+#: series = "image"
+#: name = "lldp.tar.gz"
 #: from_output = "/out/lldp.tar.gz"
 #:
 #: [[publish]]
-#: series = "illumos"
-#: name = "lldp-asic.sha256.txt"
+#: series = "image"
+#: name = "lldp.sha256.txt"
 #: from_output = "/out/lldp.sha256.txt"
 #:
 
