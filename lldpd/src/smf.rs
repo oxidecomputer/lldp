@@ -94,9 +94,8 @@ pub fn refresh_smf_config(g: &crate::Global) -> LldpdResult<()> {
     let mut s = g.switchinfo.lock().unwrap();
     if let Ok(id) = get_properties(&pg, SMF_SCRIMLET_ID_PROP) {
         debug!(g.log, "config/{SMF_SCRIMLET_ID_PROP}: {id:?}");
-        let chassis_id = ChassisId::ChassisComponent(id[0].to_string());
         if !id.is_empty() {
-            s.chassis_id = chassis_id;
+            s.chassis_id = ChassisId::ChassisComponent(id[0].to_string());
             s.system_name = Some(id[0].clone());
         }
     }

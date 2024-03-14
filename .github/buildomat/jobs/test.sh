@@ -21,8 +21,6 @@ done
 # This file is generated dynamically during the build, and its absence here
 # makes rustfmt sad.
 echo '#![rustfmt::skip]' > lldpd/src/ffi.rs
-git add lldpd/src/ffi.rs
-git commit -m dummy
 
 banner "fmt"
 cargo fmt -- --check
