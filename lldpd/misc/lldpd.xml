@@ -4,11 +4,15 @@
 <service_bundle type='manifest' name='oxide-lldpd'>
 
     <service name='oxide/lldpd' type='service' version='1'>
-    <create_default_instance enabled='false'/>
+    <create_default_instance enabled='true'/>
     <single_instance/>
 
     <dependency name='net-physical' grouping='require_all' restart_on='none' type='service'>
       <service_fmri value='svc:/network/physical'/>
+    </dependency>
+
+    <dependency name='zone_network_setup' grouping='require_all' restart_on='none' type='service'>
+      <service_fmri value='svc:/oxide/zone-network-setup:default' />
     </dependency>
 
     <exec_method name='start'
