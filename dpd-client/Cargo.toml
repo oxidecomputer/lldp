@@ -8,6 +8,7 @@ description = "Client library for the Dendrite data plane daemon"
 dendrite = [ ]
 
 [dependencies]
+regress = "0.9"
 futures.workspace = true
 reqwest.workspace = true
 schemars.workspace = true

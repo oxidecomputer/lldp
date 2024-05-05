@@ -37,8 +37,5 @@ progenitor::generate_api!(
         slog::trace!(state.log, "client response"; "result" => ?result);
     }),
     derives = [PartialEq],
-    replace = {
-        PortId = common::ports::PortId ,
-        MacAddr = common::MacAddr
-    }
+    replace = { MacAddr = common::MacAddr }
 );

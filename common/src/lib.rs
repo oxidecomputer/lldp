@@ -16,8 +16,6 @@ use slog::o;
 use slog::Drain;
 use thiserror::Error;
 
-pub mod ports;
-
 pub const DEFAULT_LLDPD_PORT: u16 = 12230;
 
 /// Given two arrays, return two vectors containing only the unique items from each array.
