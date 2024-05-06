@@ -148,7 +148,7 @@ fn get_interface(
         .unwrap()
         .get(iface)
         .ok_or(LldpdError::Missing(format!("no such interface: {iface}")))
-        .map(|i| i.clone())
+        .cloned()
 }
 
 // Construct an LLDPDU structure with all of the information we have about this
