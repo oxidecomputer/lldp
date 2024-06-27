@@ -325,10 +325,12 @@ async fn interface_del(
     rqctx: RequestContext<Arc<Global>>,
     path: Path<InterfacePathParams>,
 ) -> Result<HttpResponseDeleted, HttpError> {
-    let global: &Global = rqctx.context();
+    let global: &Arc<Global> = rqctx.context();
     let interface = path.into_inner().iface;
-    debug!(global.log, "deleted  {interface}");
-    Ok(HttpResponseDeleted())
+    crate::interfaces::interface_remove(global, interface)
+        .await
+        .map(|_| HttpResponseDeleted())
+        .map_err(|e| e.into())
 }
 
 #[endpoint {

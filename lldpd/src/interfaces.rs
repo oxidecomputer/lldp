@@ -661,6 +661,48 @@ pub async fn interface_add(
     Ok(())
 }
 
+pub async fn interface_remove(
+    global: &Arc<Global>,
+    name: String,
+) -> LldpdResult<()> {
+    for tries in 1..11 {
+        {
+            // Look in the hash for this interface.  If we find it, make a
+            // copy of the tx channel needed to ask it to shut down.
+            let msg_tx = {
+                let iface_hash = global.interfaces.lock().unwrap();
+                iface_hash
+                    .get(&name)
+                    .map(|iface| iface.lock().unwrap().msg_tx.clone())
+            };
+
+            // If this is our first attempt to shut down the interface, but we
+            // don't have a tx channel, it means the interface wasn't
+            // configured.  If it's not the first attempt, it means that the
+            // interface has shut down in response to our message.
+            match (tries, msg_tx) {
+                (_, Some(tx)) => {
+                    info!(global.log, "Shutting down {name}. Attempt: {tries}");
+                    let _ = tx.send(InterfaceMsg::TimeToGo).await;
+                }
+                (1, None) => {
+                    return Err(LldpdError::Missing(
+                        "no such interface configured".into(),
+                    ))
+                }
+                (_, None) => {
+                    info!(global.log, "Monitor loop for {name} shut down");
+                    return Ok(());
+                }
+            };
+        }
+        let _ = tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    Err(LldpdError::Other(
+        "interface monitor loop failed to shut down".into(),
+    ))
+}
+
 pub async fn shutdown_all(g: &Global) {
     debug!(&g.log, "shutting down interface tasks");
     let msgs: Vec<mpsc::Sender<InterfaceMsg>> = g

@@ -191,15 +191,24 @@ async fn update_interface_properties(
     }
 
     for iface in &ifaces {
+        debug!(g.log, "processing {iface}");
         match construct_config(snapshot, iface) {
             Ok(c) => {
-                // The parameters are all vetted while constructing the
-                // config struct, so the only way the update call can fail
-                // is if the interface hasn't been configured yet.
-                match interfaces::update_from_cfg(g, iface, &c).await {
-                    Ok(_) => _ = orphaned_interfaces.remove(iface),
+                // The parameters are all vetted while constructing the config
+                // struct, so the only way the update call can fail is if the
+                // interface hasn't been configured yet.
+                //
+                // XXX: omicron has no support for breakout links yet, so we
+                // only get the name of the full port.  We append a link number
+                // of /0, as that's what everything dowstream of here expects.
+
+                let iface = format!("{iface}/0");
+
+                match interfaces::update_from_cfg(g, &iface, &c).await {
+                    Ok(_) => _ = orphaned_interfaces.remove(&iface),
                     Err(_) => {
-                        _ = interfaces::interface_add(g, iface.clone(), c).await
+                        debug!(g.log, "update failed - adding {iface}");
+                        _ = interfaces::interface_add(g, iface, c).await
                     }
                 }
             }
@@ -209,6 +218,9 @@ async fn update_interface_properties(
         }
     }
     info!(g.log, "orphaned interfaces: {orphaned_interfaces:?}");
+    for iface in orphaned_interfaces {
+        _ = interfaces::interface_remove(g, iface).await
+    }
 
     Ok(())
 }
