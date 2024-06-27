@@ -301,18 +301,20 @@ async fn interface_add(
     let global: &Arc<Global> = rqctx.context();
     let interface = path.into_inner().iface;
     let params = params.into_inner();
-    crate::interfaces::interface_add(
-        global,
-        interface,
-        params.chassis_id,
-        params.port_id,
-        params.system_name,
-        params.system_description,
-        params.port_description,
-    )
-    .await
-    .map(HttpResponseCreated)
-    .map_err(|e| e.into())
+    let cfg = interfaces::InterfaceCfg {
+        chassis_id: params.chassis_id,
+        port_id: params.port_id,
+        system_name: params.system_name,
+        system_description: params.system_description,
+        port_description: params.port_description,
+        management_addrs: None,
+        admin_status: None,
+    };
+
+    crate::interfaces::interface_add(global, interface, cfg)
+        .await
+        .map(HttpResponseCreated)
+        .map_err(|e| e.into())
 }
 
 #[endpoint {

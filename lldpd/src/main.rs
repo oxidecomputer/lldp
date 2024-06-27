@@ -16,6 +16,7 @@ use signal_hook::iterator::Signals;
 use slog::debug;
 use slog::info;
 use structopt::StructOpt;
+use tokio::runtime::Handle;
 
 use errors::LldpdError;
 use interfaces::Interface;
@@ -140,7 +141,11 @@ pub(crate) struct Opt {
 }
 
 #[allow(unused_variables)]
-fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
+fn signal_handler(
+    g: Arc<Global>,
+    runtime: Handle,
+    smf_tx: tokio::sync::watch::Sender<()>,
+) {
     const SIGNALS: &[std::ffi::c_int] =
         &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR2];
     let mut sigs = Signals::new(SIGNALS).unwrap();
@@ -153,7 +158,8 @@ fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
         }
         #[cfg(feature = "smf")]
         if signal == SIGUSR2 && std::env::var("SMF_FMRI").is_ok() {
-            match smf::refresh_smf_config(&g) {
+            match runtime.block_on(async { smf::refresh_smf_config(&g).await })
+            {
                 Ok(()) => _ = smf_tx.send(()),
                 Err(e) => {
                     slog::error!(&log, "While updating the SMF config: {e:?}")
@@ -211,7 +217,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     ));
 
     #[cfg(feature = "smf")]
-    if let Err(e) = smf::refresh_smf_config(&global) {
+    if let Err(e) = smf::refresh_smf_config(&global).await {
         slog::error!(&log, "while loading SMF config: {e:?}");
     }
 
@@ -221,7 +227,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         api_server::api_server_manager(api_global, api_rx).await
     });
 
-    signal_handler(global.clone(), api_tx);
+    signal_handler(global.clone(), Handle::current(), api_tx);
 
     debug!(&log, "shutting down API server");
     api_server_manager

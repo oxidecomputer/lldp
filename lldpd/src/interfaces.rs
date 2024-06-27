@@ -101,6 +101,18 @@ pub struct Interface {
     tx_fast: u16,
 }
 
+/// Settings that can be updated via SMF
+#[derive(Debug)]
+pub struct InterfaceCfg {
+    pub chassis_id: Option<protocol::ChassisId>,
+    pub port_id: Option<protocol::PortId>,
+    pub system_name: Option<String>,
+    pub system_description: Option<String>,
+    pub port_description: Option<String>,
+    pub management_addrs: Option<BTreeSet<IpAddr>>,
+    pub admin_status: Option<types::AdminStatus>,
+}
+
 /// Statistics described in section 9.2.6 of the standard
 #[derive(Clone, Debug, Default)]
 pub struct Stats {
@@ -130,7 +142,41 @@ pub enum InterfaceMsg {
     TimeToGo,
 }
 
+macro_rules! maybe_update {
+    ($a:ident, $b:ident, $field:ident) => {
+        if $a.$field != $b.$field {
+            $a.$field = $b.$field.clone();
+            true
+        } else {
+            false
+        }
+    };
+}
+
 impl Interface {
+    // Given an InterfaceCfg structure, update any fields in the Interface
+    // that don't match.  If any fields were modified, return "true".  If
+    // the Interface is unchanged, return "false".
+    pub fn update_from_cfg(&mut self, cfg: &InterfaceCfg) -> bool {
+        let mut updated = false;
+
+        if let Some(port_id) = &cfg.port_id {
+            if self.port_id != *port_id {
+                self.port_id = port_id.clone();
+                updated = true;
+            }
+        }
+
+        updated |= maybe_update!(self, cfg, chassis_id);
+        updated |= maybe_update!(self, cfg, system_name);
+        updated |= maybe_update!(self, cfg, system_description);
+        updated |= maybe_update!(self, cfg, port_description);
+        updated |= maybe_update!(self, cfg, management_addrs);
+        updated |= maybe_update!(self, cfg, admin_status);
+
+        updated
+    }
+
     /// Ask the interface loop to shut itself down and clean up after itself.
     pub async fn shutdown(&mut self) {
         let _ = self.msg_tx.send(InterfaceMsg::TimeToGo).await;
@@ -461,6 +507,7 @@ async fn interface_loop(
     let iface_name = iface_lock.lock().unwrap().iface.clone();
     let log = iface_lock.lock().unwrap().log.clone();
 
+    debug!(log, "Interface loop started");
     let (transport, asyncfd) = match transport_init(&iface_name) {
         Ok((t, a)) => (t, a),
         Err(e) => {
@@ -499,8 +546,10 @@ async fn interface_loop(
         // Is it time for another advertisement?
         if Instant::now() > next_tx {
             let switchinfo = g.switchinfo.lock().unwrap().clone();
+            debug!(log, "sending lldpu");
             let ticks = tx_lldpdu(&switchinfo, &iface_lock, &transport).await;
             next_tx = Instant::now() + Duration::from_secs(ticks as u64);
+            debug!(log, "wake up in {ticks} seconds");
         }
 
         match wait_for_event(&mut msg_rx, &asyncfd, next_tx).await {
@@ -552,20 +601,16 @@ async fn interface_loop(
         .expect("interface hash entry should persist until task exits");
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn interface_add(
     global: &Arc<Global>,
     name: String,
-    chassis_id: Option<protocol::ChassisId>,
-    port_id: Option<protocol::PortId>,
-    system_name: Option<String>,
-    system_description: Option<String>,
-    port_description: Option<String>,
+    cfg: InterfaceCfg,
 ) -> LldpdResult<()> {
     info!(&global.log, "Adding interface"; "name" => name.to_string());
 
-    let port_id =
-        port_id.unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
+    let port_id = cfg
+        .port_id
+        .unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
     let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
 
     let mut iface_hash = global.interfaces.lock().unwrap();
@@ -584,18 +629,18 @@ pub async fn interface_add(
         log,
         iface,
         mac,
-        chassis_id,
+        chassis_id: cfg.chassis_id,
         port_id,
-        system_name,
-        system_description,
-        port_description,
-        management_addrs: None,
+        system_name: cfg.system_name,
+        system_description: cfg.system_description,
+        port_description: cfg.port_description,
+        management_addrs: cfg.management_addrs,
         msg_tx,
 
         stats: Stats::default(),
         neighbors: BTreeMap::new(),
 
-        admin_status: None,
+        admin_status: cfg.admin_status,
         msg_fast_tx: None,
         msg_tx_hold: None,
         msg_tx_interval: None,
@@ -633,6 +678,26 @@ pub async fn shutdown_all(g: &Global) {
     while !g.interfaces.lock().unwrap().is_empty() {
         let _ = tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
+}
+
+pub async fn update_from_cfg(
+    g: &Global,
+    name: &String,
+    cfg: &InterfaceCfg,
+) -> LldpdResult<()> {
+    let msg_tx = {
+        let iface = get_interface(g, name)?;
+        let mut iface = iface.lock().unwrap();
+
+        if !iface.update_from_cfg(cfg) {
+            return Ok(());
+        }
+        info!(g.log, "updated {name} to {iface:#?}");
+        iface.msg_tx.clone()
+    };
+
+    let _ = msg_tx.send(InterfaceMsg::UpdatedInfo).await;
+    Ok(())
 }
 
 /// Update a property belonging to an interface, and send the interface loop
