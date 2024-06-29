@@ -3,6 +3,7 @@
 
 // Copyright 2024 Oxide Computer Company
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -15,6 +16,7 @@ use slog::info;
 
 use super::interfaces;
 use super::types;
+use crate::interfaces::InterfaceCfg;
 use crate::protocol::ChassisId;
 use crate::protocol::PortId;
 use crate::types::LldpdResult;
@@ -168,10 +170,10 @@ fn construct_config(
     })
 }
 
-async fn update_interface_properties(
+fn build_configs(
     g: &Arc<crate::Global>,
-    snapshot: &Snapshot<'_>,
-) -> LldpdResult<()> {
+    snapshot: Snapshot<'_>,
+) -> LldpdResult<HashMap<String, InterfaceCfg>> {
     // Iterate over all of the property groups, looking for port_qsfpX.
     let ifaces: Vec<String> = {
         let mut groups = snapshot.pgs().context("getting property groups")?;
@@ -185,35 +187,48 @@ async fn update_interface_properties(
             .collect()
     };
 
+    let mut map = HashMap::new();
+    for iface in ifaces {
+        match construct_config(&snapshot, &iface) {
+            Ok(c) => _ = map.insert(iface.clone(), c),
+            Err(e) => {
+                error!(g.log, "unable to parse config for {iface}: {e:?}")
+            }
+        }
+    }
+    Ok(map)
+}
+
+async fn update_interface_properties(
+    g: &Arc<crate::Global>,
+    configs: HashMap<String, InterfaceCfg>,
+) -> LldpdResult<()> {
+    // Build a list of all interfaces currently configured.  As we process
+    // each SMF-defined interface, it will be removed from this list.  Any
+    // interfaces remaining in the list at the end will represent interfaces
+    // that are no longer in the SMF config, and should be dropped.
+    //
+    // Note: This means that any interfaces manually configured with the CLI
+    // will also be removed.  Supporting a mix of manual and SMF configs is
+    // possible, but resolving conflicts between the two seems like a can of
+    // worms best left shut for now.
     let mut orphaned_interfaces = HashSet::new();
     for iface in g.interfaces.lock().unwrap().keys() {
         orphaned_interfaces.insert(iface.to_string());
     }
 
-    for iface in &ifaces {
+    for (iface, cfg) in configs {
+        // XXX: omicron has no support for breakout links yet, so we
+        // only get the name of the full port.  We append a link number
+        // of /0, as that's what everything dowstream of here expects.
+        let iface = format!("{iface}/0");
         debug!(g.log, "processing {iface}");
-        match construct_config(snapshot, iface) {
-            Ok(c) => {
-                // The parameters are all vetted while constructing the config
-                // struct, so the only way the update call can fail is if the
-                // interface hasn't been configured yet.
-                //
-                // XXX: omicron has no support for breakout links yet, so we
-                // only get the name of the full port.  We append a link number
-                // of /0, as that's what everything dowstream of here expects.
 
-                let iface = format!("{iface}/0");
-
-                match interfaces::update_from_cfg(g, &iface, &c).await {
-                    Ok(_) => _ = orphaned_interfaces.remove(&iface),
-                    Err(_) => {
-                        debug!(g.log, "update failed - adding {iface}");
-                        _ = interfaces::interface_add(g, iface, c).await
-                    }
-                }
-            }
-            Err(e) => {
-                error!(g.log, "unable to parse config for {iface}: {e:?}")
+        match interfaces::update_from_cfg(g, &iface, &cfg).await {
+            Ok(_) => _ = orphaned_interfaces.remove(&iface),
+            Err(_) => {
+                debug!(g.log, "update failed - adding {iface}");
+                _ = interfaces::interface_add(g, iface, cfg).await
             }
         }
     }
@@ -228,15 +243,24 @@ async fn update_interface_properties(
 pub async fn refresh_smf_config(g: &Arc<crate::Global>) -> LldpdResult<()> {
     debug!(&g.log, "refreshing SMF configuration data");
 
-    // Create an SMF context and take a snapshot of the current settings
-    let scf = crucible_smf::Scf::new().context("creating scf handle")?;
-    let instance = scf.get_self_instance().context("getting smf instance")?;
-    let snapshot = instance
-        .get_running_snapshot()
-        .context("getting running snapshot")?;
+    let configs = {
+        // Create an SMF context and take a snapshot of the current settings
+        let scf = crucible_smf::Scf::new().context("creating scf handle")?;
+        let instance =
+            scf.get_self_instance().context("getting smf instance")?;
+        let snapshot = instance
+            .get_running_snapshot()
+            .context("getting running snapshot")?;
 
-    update_system_properties(g, &snapshot)?;
-    update_interface_properties(g, &snapshot).await?;
+        update_system_properties(g, &snapshot)?;
+
+        // From the settings in the snapshot, build the per-interface config
+        // structs
+        build_configs(g, snapshot)?
+    };
+
+    // Apply the per-interface configs
+    update_interface_properties(g, configs).await?;
 
     Ok(())
 }

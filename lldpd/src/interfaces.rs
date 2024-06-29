@@ -722,6 +722,7 @@ pub async fn shutdown_all(g: &Global) {
     }
 }
 
+#[cfg(feature = "smf")]
 pub async fn update_from_cfg(
     g: &Global,
     name: &String,

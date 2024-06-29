@@ -16,7 +16,6 @@ use signal_hook::iterator::Signals;
 use slog::debug;
 use slog::info;
 use structopt::StructOpt;
-use tokio::runtime::Handle;
 
 use errors::LldpdError;
 use interfaces::Interface;
@@ -143,7 +142,6 @@ pub(crate) struct Opt {
 #[allow(unused_variables)]
 async fn signal_handler(
     g: Arc<Global>,
-    runtime: Handle,
     smf_tx: tokio::sync::watch::Sender<()>,
 ) {
     const SIGNALS: &[std::ffi::c_int] =
@@ -220,13 +218,19 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         slog::error!(&log, "while loading SMF config: {e:?}");
     }
 
+    #[cfg(all(feature = "smf", feature = "dendrite"))]
+    if global.dpd.is_some() {
+        let g = global.clone();
+        _ = tokio::task::spawn(async move { dendrite::link_monitor(g).await })
+    }
+
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
     let api_global = global.clone();
     let api_server_manager = tokio::task::spawn(async move {
         api_server::api_server_manager(api_global, api_rx).await
     });
 
-    signal_handler(global.clone(), Handle::current(), api_tx).await;
+    signal_handler(global.clone(), api_tx).await;
 
     debug!(&log, "shutting down API server");
     api_server_manager

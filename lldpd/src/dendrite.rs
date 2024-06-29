@@ -4,6 +4,9 @@
 
 // Copyright 2024 Oxide Computer Company
 
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use slog::error;
 use slog::info;
 
@@ -69,11 +72,52 @@ async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
     }
 }
 
+async fn get_links(g: &crate::Global) -> LldpdResult<HashSet<String>> {
+    let mut links = HashSet::new();
+    for l in g
+        .dpd
+        .as_ref()
+        .expect("monitor only runs if dpd is set up")
+        .link_list_all()
+        .await
+        .map_err(|e| LldpdError::DpdClientError(e.to_string()))?
+        .into_inner()
+    {
+        links.insert(format!(
+            "{}/{}",
+            l.port_id.to_string(),
+            l.link_id.to_string()
+        ));
+    }
+    Ok(links)
+}
+
+#[cfg(feature = "smf")]
+pub async fn link_monitor(g: Arc<crate::Global>) {
+    let log = g.log.new(slog::o!("unit" => "dpd-link-monitor"));
+    let mut links = HashSet::new();
+    loop {
+        let _ =
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        match get_links(&g).await {
+            Ok(current) => {
+                let new = current.difference(&links);
+                let dead = links.difference(&current);
+                if links != current {
+                    info!(g.log, "new links: {new:?}  missing links: {dead:?}");
+                    _ = super::smf::refresh_smf_config(&g).await;
+                    links = current;
+                }
+            }
+            Err(e) => error!(log, "failed to fetch link info: {e:?}"),
+        }
+    }
+}
+
 pub async fn dpd_init(
     log: &slog::Logger,
     opts: crate::Opt,
 ) -> Option<dpd_client::Client> {
-    info!(log, "opts: {opts:#?}");
     if opts.no_dpd {
         None
     } else {
