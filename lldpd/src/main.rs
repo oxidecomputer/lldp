@@ -17,9 +17,9 @@ use slog::debug;
 use slog::info;
 use structopt::StructOpt;
 
-use errors::LldpdError;
+pub use errors::LldpdError;
 use interfaces::Interface;
-use types::LldpdResult;
+pub use types::LldpdResult;
 
 mod api_server;
 mod errors;

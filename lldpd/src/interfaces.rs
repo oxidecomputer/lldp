@@ -508,16 +508,20 @@ async fn interface_loop(
     let log = iface_lock.lock().unwrap().log.clone();
 
     debug!(log, "Interface loop started");
-    let (transport, asyncfd) = match transport_init(&iface_name) {
-        Ok((t, a)) => (t, a),
-        Err(e) => {
-            // TODO: add a "failed" state to interfaces in the hash so the
-            // client can retrieve an error message, rather than having them
-            // silently disappear
-            error!(log, "failed to init transport: {e:?}");
-            return;
-        }
-    };
+    let (transport, asyncfd) =
+        match transport_init(&iface_name) {
+            Ok((t, a)) => (t, a),
+            Err(e) => {
+                // TODO: add a "failed" state to interfaces in the hash so the
+                // client can retrieve an error message, rather than having them
+                // silently disappear
+                error!(log, "failed to init transport: {e:?}");
+                g.interfaces.lock().unwrap().remove(&name).expect(
+                    "interface hash entry should persist until task exits",
+                );
+                return;
+            }
+        };
 
     let mut buf = [0u8; 4096];
     let mut next_tx = Instant::now();
@@ -546,10 +550,8 @@ async fn interface_loop(
         // Is it time for another advertisement?
         if Instant::now() > next_tx {
             let switchinfo = g.switchinfo.lock().unwrap().clone();
-            debug!(log, "sending lldpu");
             let ticks = tx_lldpdu(&switchinfo, &iface_lock, &transport).await;
             next_tx = Instant::now() + Duration::from_secs(ticks as u64);
-            debug!(log, "wake up in {ticks} seconds");
         }
 
         match wait_for_event(&mut msg_rx, &asyncfd, next_tx).await {
@@ -595,8 +597,9 @@ async fn interface_loop(
     tx_shutdown(&switchinfo, &iface_lock, &transport).await;
 
     debug!(log, "interface loop shutting down");
-    let mut iface_hash = g.interfaces.lock().unwrap();
-    iface_hash
+    g.interfaces
+        .lock()
+        .unwrap()
         .remove(&name)
         .expect("interface hash entry should persist until task exits");
 }
