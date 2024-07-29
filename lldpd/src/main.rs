@@ -150,8 +150,8 @@ async fn signal_handler(
 
     let log = g.log.new(slog::o!("unit" => "signal-handler"));
     for signal in &mut sigs {
-        info!(&log, "caught signal {}", signal);
         if signal == SIGINT || signal == SIGQUIT || signal == SIGTERM {
+            info!(&log, "caught signal {signal} - exiting");
             break;
         }
         #[cfg(feature = "smf")]

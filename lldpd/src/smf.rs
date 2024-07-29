@@ -10,9 +10,9 @@ use std::sync::Arc;
 use anyhow::Context;
 use crucible_smf::PropertyGroup;
 use crucible_smf::Snapshot;
-use slog::debug;
 use slog::error;
 use slog::info;
+use slog::trace;
 
 use super::interfaces;
 use super::types;
@@ -86,7 +86,7 @@ fn update_system_properties(
     };
 
     if let Ok(addresses) = get_properties(&pg, SMF_ADDRESS_PROP) {
-        debug!(g.log, "config/{SMF_ADDRESS_PROP}: {addresses:?}");
+        trace!(g.log, "config/{SMF_ADDRESS_PROP}: {addresses:?}");
         let mut listen_addresses = Vec::new();
         for addr in addresses {
             match addr.parse() {
@@ -105,17 +105,17 @@ fn update_system_properties(
 
     let mut s = g.switchinfo.lock().unwrap();
     if let Ok(id) = get_property(&pg, SMF_SCRIMLET_ID_PROP) {
-        debug!(g.log, "config/{SMF_SCRIMLET_ID_PROP}: {id:?}");
+        trace!(g.log, "config/{SMF_SCRIMLET_ID_PROP}: {id:?}");
         s.chassis_id = ChassisId::ChassisComponent(id.to_string());
         s.system_name = Some(id.clone());
     }
     let mut desc = Vec::new();
     if let Ok(model) = get_property(&pg, SMF_SCRIMLET_MODEL_PROP) {
-        debug!(g.log, "config/{SMF_SCRIMLET_MODEL_PROP}: {model:?}");
+        trace!(g.log, "config/{SMF_SCRIMLET_MODEL_PROP}: {model:?}");
         desc.push(format!("Oxide sled model: {}", model));
     }
     if let Ok(board) = get_property(&pg, SMF_BOARD_REV_PROP) {
-        debug!(g.log, "config/{SMF_BOARD_REV_PROP}: {board:?}");
+        trace!(g.log, "config/{SMF_BOARD_REV_PROP}: {board:?}");
         desc.push(format!("Sidecar revision: {}", board));
     }
     if !desc.is_empty() {
@@ -157,7 +157,9 @@ fn construct_config(
     let system_name = get_property(&pg, "system_name").ok();
     let system_description = get_property(&pg, "system_description").ok();
     let port_description = get_property(&pg, "port_description").ok();
-    let management_addrs = None; //get_property(&pg, "management_addrs").ok();
+    // Todo: https://github.com/oxidecomputer/lldp/issues/11
+    // Something like this: get_property(&pg, "management_addrs").ok();
+    let management_addrs = None;
 
     Ok(interfaces::InterfaceCfg {
         admin_status,
@@ -222,26 +224,29 @@ async fn update_interface_properties(
         // only get the name of the full port.  We append a link number
         // of /0, as that's what everything dowstream of here expects.
         let iface = format!("{iface}/0");
-        debug!(g.log, "processing {iface}");
 
         match interfaces::update_from_cfg(g, &iface, &cfg).await {
             Ok(_) => _ = orphaned_interfaces.remove(&iface),
             Err(_) => {
-                debug!(g.log, "update failed - adding {iface}");
+                // The only failure mode for this call is if the interface
+                // doesn't exist.
+                info!(g.log, "Adding new interface: {iface}");
                 _ = interfaces::interface_add(g, iface, cfg).await
             }
         }
     }
-    info!(g.log, "orphaned interfaces: {orphaned_interfaces:?}");
-    for iface in orphaned_interfaces {
-        _ = interfaces::interface_remove(g, iface).await
+    if !orphaned_interfaces.is_empty() {
+        info!(g.log, "orphaned interfaces: {orphaned_interfaces:?}");
+        for iface in orphaned_interfaces {
+            _ = interfaces::interface_remove(g, iface).await
+        }
     }
 
     Ok(())
 }
 
 pub async fn refresh_smf_config(g: &Arc<crate::Global>) -> LldpdResult<()> {
-    debug!(&g.log, "refreshing SMF configuration data");
+    trace!(&g.log, "refreshing SMF configuration data");
 
     let configs = {
         // Create an SMF context and take a snapshot of the current settings
