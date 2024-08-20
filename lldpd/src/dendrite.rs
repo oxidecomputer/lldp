@@ -146,33 +146,28 @@ mod dendrite_smf {
 
             let mut refresh_needed = false;
             match get_links(&g).await {
-                Ok(current) => {
+                Ok(current) if links != current => {
                     let new = current.difference(&links);
                     let dead = links.difference(&current);
-                    if links != current {
-                        info!(
-                            g.log,
-                            "new links: {new:?}  missing links: {dead:?}"
-                        );
-                        links = current;
-                        refresh_needed = true;
-                    }
+                    info!(g.log, "new links: {new:?}  missing links: {dead:?}");
+                    links = current;
+                    refresh_needed = true;
                 }
+                Ok(_) => {} // Status quo.  Nothing to do.
                 Err(e) => error!(log, "failed to fetch link info: {e:?}"),
             }
             match get_tfports().await {
-                Ok(current) => {
+                Ok(current) if tfports != current => {
                     let new = current.difference(&tfports);
                     let dead = tfports.difference(&current);
-                    if tfports != current {
-                        info!(
-                            g.log,
-                            "new tfports: {new:?}  missing tfports: {dead:?}"
-                        );
-                        tfports = current;
-                        refresh_needed = true;
-                    }
+                    info!(
+                        g.log,
+                        "new tfports: {new:?}  missing tfports: {dead:?}"
+                    );
+                    tfports = current;
+                    refresh_needed = true;
                 }
+                Ok(_) => {} // Status quo.  Nothing to do.
                 Err(e) => error!(log, "failed to fetch tfports info: {e:?}"),
             }
 

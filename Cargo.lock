@@ -376,17 +376,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
 
 [[package]]
-name = "crucible-smf"
-version = "0.0.0"
-source = "git+https://github.com/oxidecomputer/crucible?rev=9bcd80c3392d2f0128ef1ac5aa13036d268a8e8e#9bcd80c3392d2f0128ef1ac5aa13036d268a8e8e"
-dependencies = [
- "libc",
- "num-derive",
- "num-traits",
- "thiserror",
-]
-
-[[package]]
 name = "crypto-common"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1071,7 +1060,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -1082,6 +1071,16 @@ checksum = "c0ff37bd590ca25063e35af745c343cb7a0271906fb7b37e4813e8f79f00268d"
 dependencies = [
  "bitflags 2.5.0",
  "libc",
+]
+
+[[package]]
+name = "libscf-sys"
+version = "1.0.0"
+source = "git+https://github.com/illumos/libscf-sys.git#bb0b82c32cff5eee65efc4f214924c3daf7edc93"
+dependencies = [
+ "libc",
+ "num-derive",
+ "num-traits",
 ]
 
 [[package]]
@@ -1123,7 +1122,6 @@ dependencies = [
  "cc",
  "chrono",
  "common",
- "crucible-smf",
  "dlpi",
  "dpd-client",
  "dropshot",
@@ -1132,6 +1130,7 @@ dependencies = [
  "serde",
  "signal-hook",
  "slog",
+ "smf",
  "structopt",
  "thiserror",
  "tokio",
@@ -2147,6 +2146,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
+name = "smf"
+version = "0.10.0"
+source = "git+https://github.com/illumos/smf-rs?branch=main#f14ff3517648206baa4b42ef522d2114ed5bcb48"
+dependencies = [
+ "libc",
+ "libscf-sys",
+ "num-traits",
+ "thiserror",
+]
+
+[[package]]
 name = "socket2"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2376,9 +2386,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.37.0"
+version = "1.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
+checksum = "eb2caba9f80616f438e09748d5acda951967e1ea58508ef53d9c6402485a46df"
 dependencies = [
  "backtrace",
  "bytes",
@@ -2395,9 +2405,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.2.0"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2",
  "quote",

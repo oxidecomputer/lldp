@@ -38,8 +38,8 @@ pub enum LldpdError {
 }
 
 #[cfg(feature = "smf")]
-impl From<crucible_smf::ScfError> for LldpdError {
-    fn from(e: crucible_smf::ScfError) -> Self {
+impl From<smf_rs::ScfError> for LldpdError {
+    fn from(e: smf_rs::ScfError) -> Self {
         Self::Smf(format!("{e}"))
     }
 }

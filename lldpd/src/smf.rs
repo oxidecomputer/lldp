@@ -8,11 +8,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Context;
-use crucible_smf::PropertyGroup;
-use crucible_smf::Snapshot;
 use slog::error;
 use slog::info;
 use slog::trace;
+use smf_rs::PropertyGroup;
+use smf_rs::Snapshot;
 
 use super::interfaces;
 use super::types;
@@ -250,7 +250,7 @@ pub async fn refresh_smf_config(g: &Arc<crate::Global>) -> LldpdResult<()> {
 
     let configs = {
         // Create an SMF context and take a snapshot of the current settings
-        let scf = crucible_smf::Scf::new().context("creating scf handle")?;
+        let scf = smf_rs::Scf::new().context("creating scf handle")?;
         let instance =
             scf.get_self_instance().context("getting smf instance")?;
         let snapshot = instance

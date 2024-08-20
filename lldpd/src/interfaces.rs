@@ -39,6 +39,11 @@ use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
 use crate::plat_linux as plat;
 
+// How many times do we attempt to shutdown an interface before returning an
+// error to the client?  In practice this should never happen, but setting a
+// limit guarantees that we won't indefinitely stall a client.
+const MAX_SHUTDOWN_RETRIES: usize = 10;
+
 #[derive(Debug)]
 pub struct Interface {
     log: slog::Logger,
@@ -668,7 +673,7 @@ pub async fn interface_remove(
     global: &Arc<Global>,
     name: String,
 ) -> LldpdResult<()> {
-    for tries in 1..11 {
+    for tries in 0..MAX_SHUTDOWN_RETRIES {
         {
             // Look in the hash for this interface.  If we find it, make a
             // copy of the tx channel needed to ask it to shut down.
