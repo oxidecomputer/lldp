@@ -17,9 +17,9 @@ use slog::debug;
 use slog::info;
 use structopt::StructOpt;
 
-use errors::LldpdError;
+pub use errors::LldpdError;
 use interfaces::Interface;
-use types::LldpdResult;
+pub use types::LldpdResult;
 
 mod api_server;
 mod errors;
@@ -140,20 +140,23 @@ pub(crate) struct Opt {
 }
 
 #[allow(unused_variables)]
-fn signal_handler(g: Arc<Global>, smf_tx: tokio::sync::watch::Sender<()>) {
+async fn signal_handler(
+    g: Arc<Global>,
+    smf_tx: tokio::sync::watch::Sender<()>,
+) {
     const SIGNALS: &[std::ffi::c_int] =
-        &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR2];
+        &[SIGTERM, SIGQUIT, SIGINT, SIGHUP, SIGUSR1];
     let mut sigs = Signals::new(SIGNALS).unwrap();
 
     let log = g.log.new(slog::o!("unit" => "signal-handler"));
     for signal in &mut sigs {
-        info!(&log, "caught signal {}", signal);
         if signal == SIGINT || signal == SIGQUIT || signal == SIGTERM {
+            info!(&log, "caught signal {signal} - exiting");
             break;
         }
         #[cfg(feature = "smf")]
-        if signal == SIGUSR2 && std::env::var("SMF_FMRI").is_ok() {
-            match smf::refresh_smf_config(&g) {
+        if signal == SIGUSR1 && std::env::var("SMF_FMRI").is_ok() {
+            match smf::refresh_smf_config(&g).await {
                 Ok(()) => _ = smf_tx.send(()),
                 Err(e) => {
                     slog::error!(&log, "While updating the SMF config: {e:?}")
@@ -211,8 +214,14 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     ));
 
     #[cfg(feature = "smf")]
-    if let Err(e) = smf::refresh_smf_config(&global) {
+    if let Err(e) = smf::refresh_smf_config(&global).await {
         slog::error!(&log, "while loading SMF config: {e:?}");
+    }
+
+    #[cfg(all(feature = "smf", feature = "dendrite"))]
+    if global.dpd.is_some() {
+        let g = global.clone();
+        _ = tokio::task::spawn(async move { dendrite::link_monitor(g).await })
     }
 
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
@@ -221,7 +230,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         api_server::api_server_manager(api_global, api_rx).await
     });
 
-    signal_handler(global.clone(), api_tx);
+    signal_handler(global.clone(), api_tx).await;
 
     debug!(&log, "shutting down API server");
     api_server_manager

@@ -7,9 +7,9 @@
 use slog::error;
 use slog::info;
 
-use crate::types::LldpdResult;
 use crate::Global;
 use crate::LldpdError;
+use crate::LldpdResult;
 use common::MacAddr;
 use dpd_client::types::LinkId;
 use dpd_client::types::PortId;
@@ -69,11 +69,124 @@ async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
     }
 }
 
+#[cfg(feature = "smf")]
+mod dendrite_smf {
+    use crate::LldpdError;
+    use crate::LldpdResult;
+    use slog::error;
+    use slog::info;
+    use std::collections::HashSet;
+
+    const IPADM: &str = "/usr/sbin/ipadm";
+
+    // Run an arbitrary command.  On success, it returns OK and the stdout of the
+    // command.
+    async fn run_cmd(cmd: &str, args: &[&str]) -> LldpdResult<Vec<String>> {
+        let out = tokio::process::Command::new(cmd)
+            .args(args)
+            .output()
+            .await
+            .map_err(LldpdError::Io)?;
+
+        if !out.status.success() {
+            return Err(LldpdError::Other(format!(
+                "{} {} failed: {}",
+                cmd,
+                args[0],
+                String::from_utf8_lossy(&out.stderr).trim()
+            )));
+        }
+
+        Ok(std::str::from_utf8(&out.stdout)
+            .map_err(|e| LldpdError::Other(format!("{e:?}")))?
+            .lines()
+            .map(|l| l.to_string())
+            .collect())
+    }
+
+    async fn get_tfports() -> LldpdResult<HashSet<String>> {
+        run_cmd(IPADM, &["show-if", "-p", "-o", "IFNAME"])
+            .await
+            .map(|all_iface| {
+                all_iface
+                    .iter()
+                    .filter(|iface| iface.starts_with("tfport"))
+                    .cloned()
+                    .collect()
+            })
+    }
+
+    async fn get_links(g: &crate::Global) -> LldpdResult<HashSet<String>> {
+        let mut links = HashSet::new();
+        for l in g
+            .dpd
+            .as_ref()
+            .expect("monitor only runs if dpd is set up")
+            .link_list_all()
+            .await
+            .map_err(|e| LldpdError::DpdClientError(e.to_string()))?
+            .into_inner()
+        {
+            links.insert(format!(
+                "{}/{}",
+                l.port_id.to_string(),
+                l.link_id.to_string()
+            ));
+        }
+        Ok(links)
+    }
+
+    pub async fn link_monitor(g: std::sync::Arc<crate::Global>) {
+        let log = g.log.new(slog::o!("unit" => "dpd-link-monitor"));
+        let mut links = HashSet::new();
+        let mut tfports = HashSet::new();
+        loop {
+            let _ = tokio::time::sleep(std::time::Duration::from_millis(1000))
+                .await;
+
+            let mut refresh_needed = false;
+            match get_links(&g).await {
+                Ok(current) if links != current => {
+                    let new = current.difference(&links);
+                    let dead = links.difference(&current);
+                    info!(g.log, "new links: {new:?}  missing links: {dead:?}");
+                    links = current;
+                    refresh_needed = true;
+                }
+                Ok(_) => {} // Status quo.  Nothing to do.
+                Err(e) => error!(log, "failed to fetch link info: {e:?}"),
+            }
+            match get_tfports().await {
+                Ok(current) if tfports != current => {
+                    let new = current.difference(&tfports);
+                    let dead = tfports.difference(&current);
+                    info!(
+                        g.log,
+                        "new tfports: {new:?}  missing tfports: {dead:?}"
+                    );
+                    tfports = current;
+                    refresh_needed = true;
+                }
+                Ok(_) => {} // Status quo.  Nothing to do.
+                Err(e) => error!(log, "failed to fetch tfports info: {e:?}"),
+            }
+
+            if refresh_needed {
+                _ = crate::smf::refresh_smf_config(&g).await
+            }
+        }
+    }
+}
+
+#[cfg(feature = "smf")]
+pub async fn link_monitor(g: std::sync::Arc<crate::Global>) {
+    dendrite_smf::link_monitor(g).await
+}
+
 pub async fn dpd_init(
     log: &slog::Logger,
     opts: crate::Opt,
 ) -> Option<dpd_client::Client> {
-    info!(log, "opts: {opts:#?}");
     if opts.no_dpd {
         None
     } else {

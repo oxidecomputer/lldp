@@ -6,7 +6,7 @@ build = "build.rs"
 
 [features]
 dendrite = [ "dep:dpd-client" ]
-smf = [ "dep:crucible-smf" ]
+smf = [ "dep:smf-rs" ]
 
 [dependencies]
 anyhow.workspace = true
@@ -29,9 +29,10 @@ dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
 path = "../dpd-client"
 optional = true
 
-[dependencies.crucible-smf]
-git = "https://github.com/oxidecomputer/crucible"
-rev = "9bcd80c3392d2f0128ef1ac5aa13036d268a8e8e"
+[dependencies.smf-rs]
+git = "https://github.com/illumos/smf-rs"
+branch = "main"
+package = "smf"
 optional = true
 
 [build-dependencies]

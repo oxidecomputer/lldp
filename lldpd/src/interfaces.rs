@@ -39,6 +39,11 @@ use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
 use crate::plat_linux as plat;
 
+// How many times do we attempt to shutdown an interface before returning an
+// error to the client?  In practice this should never happen, but setting a
+// limit guarantees that we won't indefinitely stall a client.
+const MAX_SHUTDOWN_RETRIES: usize = 10;
+
 #[derive(Debug)]
 pub struct Interface {
     log: slog::Logger,
@@ -101,6 +106,18 @@ pub struct Interface {
     tx_fast: u16,
 }
 
+/// Settings that can be updated via SMF
+#[derive(Debug)]
+pub struct InterfaceCfg {
+    pub chassis_id: Option<protocol::ChassisId>,
+    pub port_id: Option<protocol::PortId>,
+    pub system_name: Option<String>,
+    pub system_description: Option<String>,
+    pub port_description: Option<String>,
+    pub management_addrs: Option<BTreeSet<IpAddr>>,
+    pub admin_status: Option<types::AdminStatus>,
+}
+
 /// Statistics described in section 9.2.6 of the standard
 #[derive(Clone, Debug, Default)]
 pub struct Stats {
@@ -130,7 +147,41 @@ pub enum InterfaceMsg {
     TimeToGo,
 }
 
+macro_rules! maybe_update {
+    ($a:ident, $b:ident, $field:ident) => {
+        if $a.$field != $b.$field {
+            $a.$field = $b.$field.clone();
+            true
+        } else {
+            false
+        }
+    };
+}
+
 impl Interface {
+    // Given an InterfaceCfg structure, update any fields in the Interface
+    // that don't match.  If any fields were modified, return "true".  If
+    // the Interface is unchanged, return "false".
+    pub fn update_from_cfg(&mut self, cfg: &InterfaceCfg) -> bool {
+        let mut updated = false;
+
+        if let Some(port_id) = &cfg.port_id {
+            if self.port_id != *port_id {
+                self.port_id = port_id.clone();
+                updated = true;
+            }
+        }
+
+        updated |= maybe_update!(self, cfg, chassis_id);
+        updated |= maybe_update!(self, cfg, system_name);
+        updated |= maybe_update!(self, cfg, system_description);
+        updated |= maybe_update!(self, cfg, port_description);
+        updated |= maybe_update!(self, cfg, management_addrs);
+        updated |= maybe_update!(self, cfg, admin_status);
+
+        updated
+    }
+
     /// Ask the interface loop to shut itself down and clean up after itself.
     pub async fn shutdown(&mut self) {
         let _ = self.msg_tx.send(InterfaceMsg::TimeToGo).await;
@@ -461,16 +512,21 @@ async fn interface_loop(
     let iface_name = iface_lock.lock().unwrap().iface.clone();
     let log = iface_lock.lock().unwrap().log.clone();
 
-    let (transport, asyncfd) = match transport_init(&iface_name) {
-        Ok((t, a)) => (t, a),
-        Err(e) => {
-            // TODO: add a "failed" state to interfaces in the hash so the
-            // client can retrieve an error message, rather than having them
-            // silently disappear
-            error!(log, "failed to init transport: {e:?}");
-            return;
-        }
-    };
+    debug!(log, "Interface loop started");
+    let (transport, asyncfd) =
+        match transport_init(&iface_name) {
+            Ok((t, a)) => (t, a),
+            Err(e) => {
+                // TODO: add a "failed" state to interfaces in the hash so the
+                // client can retrieve an error message, rather than having them
+                // silently disappear
+                error!(log, "failed to init transport: {e:?}");
+                g.interfaces.lock().unwrap().remove(&name).expect(
+                    "interface hash entry should persist until task exits",
+                );
+                return;
+            }
+        };
 
     let mut buf = [0u8; 4096];
     let mut next_tx = Instant::now();
@@ -546,26 +602,23 @@ async fn interface_loop(
     tx_shutdown(&switchinfo, &iface_lock, &transport).await;
 
     debug!(log, "interface loop shutting down");
-    let mut iface_hash = g.interfaces.lock().unwrap();
-    iface_hash
+    g.interfaces
+        .lock()
+        .unwrap()
         .remove(&name)
         .expect("interface hash entry should persist until task exits");
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn interface_add(
     global: &Arc<Global>,
     name: String,
-    chassis_id: Option<protocol::ChassisId>,
-    port_id: Option<protocol::PortId>,
-    system_name: Option<String>,
-    system_description: Option<String>,
-    port_description: Option<String>,
+    cfg: InterfaceCfg,
 ) -> LldpdResult<()> {
     info!(&global.log, "Adding interface"; "name" => name.to_string());
 
-    let port_id =
-        port_id.unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
+    let port_id = cfg
+        .port_id
+        .unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
     let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
 
     let mut iface_hash = global.interfaces.lock().unwrap();
@@ -584,18 +637,18 @@ pub async fn interface_add(
         log,
         iface,
         mac,
-        chassis_id,
+        chassis_id: cfg.chassis_id,
         port_id,
-        system_name,
-        system_description,
-        port_description,
-        management_addrs: None,
+        system_name: cfg.system_name,
+        system_description: cfg.system_description,
+        port_description: cfg.port_description,
+        management_addrs: cfg.management_addrs,
         msg_tx,
 
         stats: Stats::default(),
         neighbors: BTreeMap::new(),
 
-        admin_status: None,
+        admin_status: cfg.admin_status,
         msg_fast_tx: None,
         msg_tx_hold: None,
         msg_tx_interval: None,
@@ -616,6 +669,48 @@ pub async fn interface_add(
     Ok(())
 }
 
+pub async fn interface_remove(
+    global: &Arc<Global>,
+    name: String,
+) -> LldpdResult<()> {
+    for tries in 0..MAX_SHUTDOWN_RETRIES {
+        {
+            // Look in the hash for this interface.  If we find it, make a
+            // copy of the tx channel needed to ask it to shut down.
+            let msg_tx = {
+                let iface_hash = global.interfaces.lock().unwrap();
+                iface_hash
+                    .get(&name)
+                    .map(|iface| iface.lock().unwrap().msg_tx.clone())
+            };
+
+            // If this is our first attempt to shut down the interface, but we
+            // don't have a tx channel, it means the interface wasn't
+            // configured.  If it's not the first attempt, it means that the
+            // interface has shut down in response to our message.
+            match (tries, msg_tx) {
+                (_, Some(tx)) => {
+                    info!(global.log, "Shutting down {name}. Attempt: {tries}");
+                    let _ = tx.send(InterfaceMsg::TimeToGo).await;
+                }
+                (1, None) => {
+                    return Err(LldpdError::Missing(
+                        "no such interface configured".into(),
+                    ))
+                }
+                (_, None) => {
+                    info!(global.log, "Monitor loop for {name} shut down");
+                    return Ok(());
+                }
+            };
+        }
+        let _ = tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    Err(LldpdError::Other(
+        "interface monitor loop failed to shut down".into(),
+    ))
+}
+
 pub async fn shutdown_all(g: &Global) {
     debug!(&g.log, "shutting down interface tasks");
     let msgs: Vec<mpsc::Sender<InterfaceMsg>> = g
@@ -633,6 +728,27 @@ pub async fn shutdown_all(g: &Global) {
     while !g.interfaces.lock().unwrap().is_empty() {
         let _ = tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
+}
+
+#[cfg(feature = "smf")]
+pub async fn update_from_cfg(
+    g: &Global,
+    name: &String,
+    cfg: &InterfaceCfg,
+) -> LldpdResult<()> {
+    let msg_tx = {
+        let iface = get_interface(g, name)?;
+        let mut iface = iface.lock().unwrap();
+
+        if !iface.update_from_cfg(cfg) {
+            return Ok(());
+        }
+        info!(g.log, "updated {name} to {iface:#?}");
+        iface.msg_tx.clone()
+    };
+
+    let _ = msg_tx.send(InterfaceMsg::UpdatedInfo).await;
+    Ok(())
 }
 
 /// Update a property belonging to an interface, and send the interface loop
