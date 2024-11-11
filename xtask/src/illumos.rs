@@ -13,6 +13,9 @@ use std::process::Command;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use camino::Utf8Path;
+
+use omicron_zone_package::package::BuildConfig;
 
 use crate::*;
 
@@ -131,11 +134,13 @@ async fn omicron_package() -> Result<()> {
         .with_context(|| "reading manifest")?;
     let cfg = omicron_zone_package::config::parse_manifest(&manifest)?;
 
-    let output_dir = Path::new("out");
+    let output_dir = Utf8Path::new("out");
     fs::create_dir_all(output_dir)?;
 
+    let build_config = BuildConfig::default();
     for package in cfg.packages.values() {
-        if let Err(e) = package.create("lldp", output_dir).await {
+        if let Err(e) = package.create("lldp", output_dir, &build_config).await
+        {
             eprintln!("omicron packaging failed: {e:?}");
             return Err(e);
         }
