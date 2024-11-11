@@ -44,8 +44,7 @@ pub async fn dpd_tfport(
         .link_get(&port_id, &link_id)
         .await
         .map_err(|e| LldpdError::DpdClientError(e.to_string()))?;
-    let iface =
-        format!("tfport{}_{}", port_id.to_string(), link_id.to_string());
+    let iface = format!("tfport{port_id}_{link_id}");
     let mac = link_info.into_inner().address;
     Ok((iface, mac))
 }
