@@ -154,6 +154,9 @@ impl Transport {
         let mut src = [0u8; dlpi::sys::DLPI_PHYSADDR_MAX];
         dlpi::recv(self.dlpi_in, &mut src, buf, -1, None)
             .map(|(_, len)| Some(len))
-            .map_err(|e| LldpdError::Dlpi(e.to_string()))
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::Interrupted => LldpdError::EIntr,
+                _ => LldpdError::Dlpi(e.to_string()),
+            })
     }
 }

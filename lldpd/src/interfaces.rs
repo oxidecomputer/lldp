@@ -73,7 +73,7 @@ pub struct Interface {
     /// We support changing these settings are either the interface level or
     /// system levl.  Any value of None in the Interface struct will default to
     /// the system-level setting defined in the Agent structure.
-
+    ///
     /// Whether the agent should be sending, receiving, or both.
     admin_status: Option<types::AdminStatus>,
     /// How quickly to resend LLDPDUs during fast tx periods.
@@ -98,7 +98,7 @@ pub struct Interface {
     /// runs.  The standard defines a number of variables that are not reflected
     /// here, as we implement them as per-task timers or inter-task messages
     /// rather than as flag variables.
-
+    ///
     /// Number of LLDPDUs that can be transmitted at any one time
     _tx_credit: u16,
     /// If this value is non-0, this interface is in fast tx mode, with tx_fast
@@ -586,6 +586,10 @@ async fn interface_loop(
                 }
                 Err(LldpdError::TooSmall(_, b)) => {
                     warn!(log, "dropped excessively large packet: {b} bytes");
+                }
+                Err(LldpdError::EIntr) => {
+                    error!(log, "listener interrupted");
+                    // no action, just try again
                 }
                 Err(e) => {
                     error!(log, "listener died: {e:?}");

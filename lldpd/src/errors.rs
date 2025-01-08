@@ -33,6 +33,8 @@ pub enum LldpdError {
     Pcap(String),
     #[error("DLPI error: {0}")]
     Dlpi(String),
+    #[error("Interrupted system call")]
+    EIntr,
     #[error("error: {0}")]
     Other(String),
 }
@@ -86,6 +88,9 @@ impl convert::From<LldpdError> for dropshot::HttpError {
             LldpdError::Pcap(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Dlpi(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::Smf(e) => dropshot::HttpError::for_internal_error(e),
+            LldpdError::EIntr => dropshot::HttpError::for_internal_error(
+                "interrupted system call".into(),
+            ),
             LldpdError::Other(e) => dropshot::HttpError::for_internal_error(e),
         }
     }
