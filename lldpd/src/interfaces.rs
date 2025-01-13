@@ -8,6 +8,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
+use std::ops::Bound;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -347,7 +348,6 @@ fn handle_packet(
             return error_accounting(iface, e);
         }
     };
-    let id = types::NeighborId::new(&lldpdu);
 
     // If one of our own LLDPDUs was reflected back to us, drop it
     if match &iface.chassis_id {
@@ -357,12 +357,13 @@ fn handle_packet(
         return;
     }
 
+    let id = types::NeighborId::new(&lldpdu);
     // Is this is new neighbor, an update from an old neighbor, or just a
     // periodic re-advertisement of the same old stuff?
     match iface.neighbors.entry(id.clone()) {
         Entry::Vacant(e) => {
             let sysinfo: types::SystemInfo = (&lldpdu).into();
-            let neighbor = types::Neighbor::from_lldpdu(&lldpdu);
+            let neighbor = types::Neighbor::from_lldpdu(&lldpdu, None);
             info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
             e.insert(neighbor);
         }
@@ -385,7 +386,7 @@ fn handle_packet(
                 trace!(iface.log, "refresh neighbor {:?}", id);
             }
         }
-    };
+    }
 }
 
 // Construct and transmit an LLDPDU on this interface.  Return the number of
@@ -942,4 +943,29 @@ pub async fn addr_delete_all(g: &Global, name: &String) -> LldpdResult<()> {
         Ok(())
     })
     .await
+}
+
+pub async fn get_neighbors(
+    g: &Global,
+    iface_name: &str,
+    prev: Option<types::NeighborId>,
+    max: u32,
+) -> LldpdResult<Vec<types::Neighbor>> {
+    let iface_lock = get_interface(g, iface_name)?;
+    let iface = iface_lock.lock().unwrap();
+
+    let max = usize::try_from(max)
+        .map_err(|e| LldpdError::Invalid(format!("invalid max size: {e:?}")))?;
+
+    let lower_bound = match prev {
+        Some(p) => Bound::Excluded(p),
+        None => Bound::Unbounded,
+    };
+
+    Ok(iface
+        .neighbors
+        .range((lower_bound, Bound::Unbounded))
+        .take(max)
+        .map(|(_key, value)| value.clone())
+        .collect())
 }
