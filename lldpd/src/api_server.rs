@@ -15,14 +15,19 @@ use std::sync::Arc;
 use chrono::DateTime;
 use chrono::Utc;
 use dropshot::endpoint;
+use dropshot::EmptyScanParams;
 use dropshot::HttpError;
 use dropshot::HttpResponseCreated;
 use dropshot::HttpResponseDeleted;
 use dropshot::HttpResponseOk;
 use dropshot::HttpResponseUpdatedNoContent;
+use dropshot::PaginationParams;
 use dropshot::Path;
+use dropshot::Query;
 use dropshot::RequestContext;
+use dropshot::ResultsPage;
 use dropshot::TypedBody;
+use dropshot::WhichPage;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -681,6 +686,15 @@ async fn interface_clear_management_addr(
         .map(|_| HttpResponseDeleted())
 }
 
+/**
+ * Represents a cursor into a paginated request for the contents of the neighbor
+ * list.
+ */
+#[derive(Deserialize, Serialize, JsonSchema)]
+struct NeighborToken {
+    id: types::NeighborId,
+}
+
 /// A remote system that has been discovered on one of our configured interfaces
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 pub struct Neighbor {
@@ -693,35 +707,49 @@ pub struct Neighbor {
 /// Return a list of the active neighbors
 #[endpoint {
     method = GET,
-    path = "/neighbors",
+    path = "/interface/{iface}/neighbors",
 }]
 async fn get_neighbors(
     rqctx: RequestContext<Arc<Global>>,
-) -> Result<HttpResponseOk<Vec<Neighbor>>, HttpError> {
+    path: Path<InterfacePathParams>,
+    query: Query<PaginationParams<EmptyScanParams, NeighborToken>>,
+) -> Result<HttpResponseOk<ResultsPage<Neighbor>>, HttpError> {
     let global: &Global = rqctx.context();
-    Ok(HttpResponseOk(
-        global
-            .interfaces
-            .lock()
-            .unwrap()
-            .iter()
-            .flat_map(|(name, iface)| {
-                iface
-                    .lock()
-                    .unwrap()
-                    .neighbors
-                    .values()
+    let pag_params = query.into_inner();
+    let iface = path.into_inner().iface;
+    let max = rqctx.page_limit(&pag_params)?.get();
+
+    let previous = match &pag_params.page {
+        WhichPage::First(..) => None,
+        WhichPage::Next(NeighborToken { id }) => Some(id.clone()),
+    };
+
+    let neighbors: Vec<Neighbor> =
+        interfaces::get_neighbors(global, &iface, previous, max)
+            .await
+            .map_err(HttpError::from)
+            .map(|neighbors| {
+                neighbors
+                    .iter()
                     .map(|n| Neighbor {
-                        port: name.clone(),
+                        port: iface.clone(),
                         first_seen: n.first_seen,
                         last_seen: n.last_seen,
                         last_changed: n.last_changed,
                         system_info: (&n.lldpdu).into(),
                     })
-                    .collect::<Vec<Neighbor>>()
-            })
-            .collect::<Vec<Neighbor>>(),
-    ))
+                    .collect()
+            })?;
+
+    ResultsPage::new(neighbors, &EmptyScanParams {}, |n: &Neighbor, _| {
+        NeighborToken {
+            id: types::NeighborId {
+                chassis_id: n.system_info.chassis_id.clone(),
+                port_id: n.system_info.port_id.clone(),
+            },
+        }
+    })
+    .map(HttpResponseOk)
 }
 
 /// Return detailed build information about the `dpd` server itself.

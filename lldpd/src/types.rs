@@ -118,7 +118,18 @@ impl Neighbor {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Deserialize,
+    JsonSchema,
+    Serialize,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct NeighborId {
     pub chassis_id: protocol::ChassisId,
     pub port_id: protocol::PortId,

@@ -9,6 +9,7 @@ use std::net::IpAddr;
 use anyhow::Context;
 use chrono::DateTime;
 use chrono::Utc;
+use futures::stream::TryStreamExt;
 use structopt::*;
 
 use lldpd_client::default_port;
@@ -466,10 +467,20 @@ async fn main() -> anyhow::Result<()> {
                 .context("failed to remove interface"),
         },
         Commands::Neighbors => {
-            let neighbors = client.get_neighbors().await?;
-            for n in neighbors.into_inner() {
-                println!("On interface {}", n.port);
-                display_neighbor(&n);
+            for iface in client
+                .interface_list()
+                .await
+                .context("failed to get interface list")?
+                .iter()
+            {
+                let neighbors: Vec<types::Neighbor> = client
+                    .get_neighbors_stream(&iface.iface, None)
+                    .try_collect()
+                    .await?;
+                for n in neighbors {
+                    println!("On interface {}", n.port);
+                    display_neighbor(&n);
+                }
             }
             Ok(())
         }
