@@ -1347,26 +1347,41 @@
         "type": "object",
         "properties": {
           "first_seen": {
+            "description": "When was the first beacon received from this neighbor.",
             "type": "string",
             "format": "date-time"
           },
+          "id": {
+            "description": "An ID that uniquely identifies the neighbor.  Note: this ID is assigned when we first see a neighbor we are currently tracking.  If a neighbor goes offline long enough to be forgotten, it will be assigned a new ID if and when it comes back online.",
+            "type": "string",
+            "format": "uuid"
+          },
           "last_changed": {
+            "description": "When was the last time this neighbor's beaconed LLDPDU contents changed.",
             "type": "string",
             "format": "date-time"
           },
           "last_seen": {
+            "description": "When was the latest beacon received from this neighbor.",
             "type": "string",
             "format": "date-time"
           },
           "port": {
+            "description": "The port on which the neighbor was seen",
             "type": "string"
           },
           "system_info": {
-            "$ref": "#/components/schemas/SystemInfo"
+            "description": "Contents of the neighbor's LLDPDU beacon.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemInfo"
+              }
+            ]
           }
         },
         "required": [
           "first_seen",
+          "id",
           "last_changed",
           "last_seen",
           "port",
