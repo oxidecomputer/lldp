@@ -1459,6 +1459,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
+ "uuid",
  "vergen",
 ]
 

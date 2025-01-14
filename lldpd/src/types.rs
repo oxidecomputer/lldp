@@ -89,6 +89,8 @@ impl From<&protocol::Lldpdu> for SystemInfo {
 /// advertisements we have received.
 #[derive(Clone, Debug)]
 pub struct Neighbor {
+    /// Uuid assigned when the neighbor was first seen
+    pub id: uuid::Uuid,
     /// When the neighbor was first seen.  Note: this is reset if the
     /// neighbor's TTL expires and we subsequently rediscover it.
     pub first_seen: DateTime<Utc>,
@@ -104,11 +106,16 @@ pub struct Neighbor {
 }
 
 impl Neighbor {
-    pub fn from_lldpdu(lldpdu: &protocol::Lldpdu) -> Self {
+    pub fn from_lldpdu(
+        lldpdu: &protocol::Lldpdu,
+        uuid: Option<uuid::Uuid>,
+    ) -> Self {
         let now = Utc::now();
 
+        let id = uuid.unwrap_or(uuid::Uuid::new_v4());
         let ttl = std::time::Duration::from_secs(lldpdu.ttl as u64);
         Neighbor {
+            id,
             first_seen: now,
             last_seen: now,
             last_changed: now,

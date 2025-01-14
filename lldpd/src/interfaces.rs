@@ -366,7 +366,7 @@ fn handle_packet(
         match iface.neighbors.entry(id.clone()) {
             Entry::Vacant(e) => {
                 let sysinfo: types::SystemInfo = (&lldpdu).into();
-                let neighbor = types::Neighbor::from_lldpdu(&lldpdu);
+                let neighbor = types::Neighbor::from_lldpdu(&lldpdu, None);
                 info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
                 e.insert(neighbor);
             }

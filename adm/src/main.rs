@@ -474,7 +474,7 @@ async fn main() -> anyhow::Result<()> {
                 .iter()
             {
                 let neighbors: Vec<types::Neighbor> = client
-                    .get_neighbors_stream(&iface.iface, None)
+                    .get_neighbors_stream(&iface.port, None)
                     .try_collect()
                     .await?;
                 for n in neighbors {
