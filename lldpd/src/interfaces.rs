@@ -357,42 +357,35 @@ fn handle_packet(
         return;
     }
 
-    let orig = lldpdu.clone();
-    let mut lldpdu = lldpdu.clone();
-    for f in 1..16 {
-        let id = types::NeighborId::new(&lldpdu);
-        // Is this is new neighbor, an update from an old neighbor, or just a
-        // periodic re-advertisement of the same old stuff?
-        match iface.neighbors.entry(id.clone()) {
-            Entry::Vacant(e) => {
+    let id = types::NeighborId::new(&lldpdu);
+    // Is this is new neighbor, an update from an old neighbor, or just a
+    // periodic re-advertisement of the same old stuff?
+    match iface.neighbors.entry(id.clone()) {
+        Entry::Vacant(e) => {
+            let sysinfo: types::SystemInfo = (&lldpdu).into();
+            let neighbor = types::Neighbor::from_lldpdu(&lldpdu, None);
+            info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
+            e.insert(neighbor);
+        }
+        Entry::Occupied(old) => {
+            // A TTL of 0 is a signal that the neighbor is going away.  This
+            // doesn't require any special handling here, as the updated
+            // "expires_at" field will cause it to be cleaned up
+            // automatically.
+            let ttl = std::time::Duration::from_secs(lldpdu.ttl as u64);
+            let now = Utc::now();
+            let old = old.into_mut();
+            old.last_seen = now;
+            old.expires_at = now + ttl;
+            if old.lldpdu != lldpdu {
                 let sysinfo: types::SystemInfo = (&lldpdu).into();
-                let neighbor = types::Neighbor::from_lldpdu(&lldpdu, None);
-                info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
-                e.insert(neighbor);
+                old.last_changed = now;
+                old.lldpdu = lldpdu;
+                info!(iface.log, "updated neighbor {:?}: {}", id, &sysinfo);
+            } else {
+                trace!(iface.log, "refresh neighbor {:?}", id);
             }
-            Entry::Occupied(old) => {
-                // A TTL of 0 is a signal that the neighbor is going away.  This
-                // doesn't require any special handling here, as the updated
-                // "expires_at" field will cause it to be cleaned up
-                // automatically.
-                let ttl = std::time::Duration::from_secs(lldpdu.ttl as u64);
-                let now = Utc::now();
-                let old = old.into_mut();
-                old.last_seen = now;
-                old.expires_at = now + ttl;
-                if old.lldpdu != lldpdu {
-                    let sysinfo: types::SystemInfo = (&lldpdu).into();
-                    old.last_changed = now;
-                    old.lldpdu = lldpdu;
-                    info!(iface.log, "updated neighbor {:?}: {}", id, &sysinfo);
-                } else {
-                    trace!(iface.log, "refresh neighbor {:?}", id);
-                }
-            }
-        };
-        lldpdu = orig.clone();
-        lldpdu.chassis_id =
-            protocol::ChassisId::LocallyAssigned(format!("copy {f}"));
+        }
     }
 }
 
@@ -961,11 +954,8 @@ pub async fn get_neighbors(
     let iface_lock = get_interface(g, iface_name)?;
     let iface = iface_lock.lock().unwrap();
 
-    let mut max = usize::try_from(max)
+    let max = usize::try_from(max)
         .map_err(|e| LldpdError::Invalid(format!("invalid max size: {e:?}")))?;
-    if max > 2 {
-        max = 2;
-    }
 
     let lower_bound = match prev {
         Some(p) => Bound::Excluded(p),
