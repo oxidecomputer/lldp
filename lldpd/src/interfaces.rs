@@ -54,6 +54,11 @@ pub struct Interface {
     pub iface: String,
     pub mac: MacAddr,
 
+    /// Has this interface been temporarily disabled?  This allows the admin to
+    /// free up the underlying network interface for some management
+    /// operation(s) without modifying the long-term configuration.
+    pub disabled: bool,
+
     /// Configurable properties
     pub chassis_id: Option<protocol::ChassisId>,
     pub port_id: protocol::PortId,
@@ -641,6 +646,7 @@ pub async fn interface_add(
     let interface = Interface {
         log,
         iface,
+        disabled: false,
         mac,
         chassis_id: cfg.chassis_id,
         port_id,
@@ -791,6 +797,21 @@ pub async fn addr_add(
             .as_mut()
             .expect("existence guaranteed above")
             .insert(*addr);
+        Ok(())
+    })
+    .await
+}
+
+/// Update the interface's `disabled` bit.
+pub async fn disabled_set(
+    g: &Global,
+    name: &String,
+    disabled: bool,
+) -> LldpdResult<()> {
+    info!(g.log, "setting disabled bit";
+	    "iface" => name, "disabled" =>disabled.to_string());
+    update_interface(g, name, |iface| {
+        iface.disabled = disabled;
         Ok(())
     })
     .await

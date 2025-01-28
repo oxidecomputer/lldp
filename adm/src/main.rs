@@ -35,16 +35,37 @@ struct GlobalOpts {
 
 #[derive(Debug, StructOpt)]
 enum IfaceSetProp {
+    Disabled {
+        iface: String,
+    },
+    Enabled {
+        iface: String,
+    },
     #[structopt(visible_alias = "cid")]
-    ChassisId { iface: String, chassis_id: String },
+    ChassisId {
+        iface: String,
+        chassis_id: String,
+    },
     #[structopt(visible_alias = "pid")]
-    PortId { iface: String, id: String },
+    PortId {
+        iface: String,
+        id: String,
+    },
     #[structopt(visible_alias = "portdesc")]
-    PortDescription { iface: String, desc: String },
+    PortDescription {
+        iface: String,
+        desc: String,
+    },
     #[structopt(visible_alias = "sysname")]
-    SystemName { iface: String, name: String },
+    SystemName {
+        iface: String,
+        name: String,
+    },
     #[structopt(visible_alias = "sysdesc")]
-    SystemDescription { iface: String, desc: String },
+    SystemDescription {
+        iface: String,
+        desc: String,
+    },
 }
 
 #[derive(Debug, StructOpt)]
@@ -328,7 +349,15 @@ fn display_neighbor(n: &types::Neighbor) {
 }
 
 fn display_interface(i: &types::Interface) {
-    println!("port: {} interface: {}", i.port, i.iface);
+    println!(
+        "port: {} interface: {}{}",
+        i.port,
+        i.iface,
+        match i.disabled {
+            true => " [Disabled]",
+            false => "",
+        }
+    );
     display_sysinfo(&i.system_info);
 }
 
@@ -338,6 +367,12 @@ async fn interface_prop(
 ) -> anyhow::Result<()> {
     match prop {
         IfaceProp::Set(set) => match set {
+            IfaceSetProp::Disabled { iface } => {
+                client.interface_set_disabled(&iface, true).await
+            }
+            IfaceSetProp::Enabled { iface } => {
+                client.interface_set_disabled(&iface, false).await
+            }
             IfaceSetProp::ChassisId { iface, chassis_id } => {
                 // TODO-completeness: allow for different kinds of chassis IDs
                 let id = types::ChassisId::ChassisComponent(chassis_id);

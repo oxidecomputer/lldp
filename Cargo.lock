@@ -537,6 +537,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

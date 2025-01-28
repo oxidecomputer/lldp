@@ -228,6 +228,44 @@
         }
       }
     },
+    "/interface/{iface}/disabled": {
+      "post": {
+        "operationId": "interface_set_disabled",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "iface",
+            "description": "The switch port on which to operate.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Boolean",
+                "type": "boolean"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "resource updated"
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/interface/{iface}/enabled_capability/{capability}": {
       "post": {
         "operationId": "interface_enable_system_capability",
@@ -1207,6 +1245,9 @@
         "description": "A local interface on which we are listening for, and dispatching, LLDPDUs",
         "type": "object",
         "properties": {
+          "disabled": {
+            "type": "boolean"
+          },
           "iface": {
             "type": "string"
           },
@@ -1218,6 +1259,7 @@
           }
         },
         "required": [
+          "disabled",
           "iface",
           "port",
           "system_info"

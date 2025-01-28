@@ -274,6 +274,7 @@ async fn sys_clear_management_addr(
 pub struct Interface {
     pub port: String,
     pub iface: String,
+    pub disabled: bool,
     pub system_info: types::SystemInfo,
 }
 
@@ -364,6 +365,7 @@ async fn interface_get(
                 Interface {
                     port: interface.clone(),
                     iface: i.iface.clone(),
+                    disabled: i.disabled,
                     system_info: (&interfaces::build_lldpdu(&switchinfo, &i))
                         .into(),
                 }
@@ -391,12 +393,31 @@ async fn interface_list(
                 Interface {
                     port: name.clone(),
                     iface: i.iface.clone(),
+                    disabled: i.disabled,
                     system_info: (&interfaces::build_lldpdu(&switchinfo, &i))
                         .into(),
                 }
             })
             .collect(),
     ))
+}
+
+#[endpoint {
+	method = POST,
+	path = "/interface/{iface}/disabled",
+}]
+async fn interface_set_disabled(
+    rqctx: RequestContext<Arc<Global>>,
+    path: Path<InterfacePathParams>,
+    body: TypedBody<bool>,
+) -> Result<HttpResponseUpdatedNoContent, HttpError> {
+    let global: &Global = rqctx.context();
+    let inner = path.into_inner();
+    let val = body.into_inner();
+    interfaces::disabled_set(global, &inner.iface, val)
+        .await
+        .map_err(|e| e.into())
+        .map(|_| HttpResponseUpdatedNoContent())
 }
 
 #[endpoint {
@@ -913,6 +934,7 @@ pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
     api.register(interface_del).unwrap();
     api.register(interface_list).unwrap();
     api.register(interface_get).unwrap();
+    api.register(interface_set_disabled).unwrap();
     api.register(interface_set_chassis_id).unwrap();
     api.register(interface_del_chassis_id).unwrap();
     api.register(interface_set_port_id).unwrap();
