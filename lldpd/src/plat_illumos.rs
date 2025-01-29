@@ -5,6 +5,7 @@
 // Copyright 2024 Oxide Computer Company
 
 use std::collections::BTreeMap;
+use tokio::io::unix::AsyncFd;
 use tokio::process::Command;
 
 use crate::types::LldpdResult;
@@ -106,6 +107,7 @@ pub async fn get_iface_and_mac(
 pub struct Transport {
     dlpi_in: dlpi::DlpiHandle,
     dlpi_out: dlpi::DlpiHandle,
+    asyncfd: AsyncFd<i32>,
 }
 
 fn dlpi_open(iface: &str) -> LldpdResult<dlpi::DlpiHandle> {
@@ -134,14 +136,26 @@ impl Transport {
                 .map(|_| hdl)
         })?;
 
-        dlpi_open(iface).map(|dlpi_out| Transport { dlpi_in, dlpi_out })
-    }
-
-    pub fn get_poll_fd(&self) -> LldpdResult<i32> {
-        match unsafe { dlpi::sys::dlpi_fd(self.dlpi_in.0) } {
+        let fd = match unsafe { dlpi::sys::dlpi_fd(dlpi_in.0) } {
             -1 => Err(LldpdError::Dlpi("invalid handle".to_string())),
             fd => Ok(fd),
-        }
+        }?;
+        let asyncfd =
+            AsyncFd::new(fd).map_err(|e| LldpdError::Other(e.to_string()))?;
+
+        dlpi_open(iface).map(|dlpi_out| Transport {
+            dlpi_in,
+            dlpi_out,
+            asyncfd,
+        })
+    }
+
+    pub async fn readable(&self) -> LldpdResult<()> {
+        self.asyncfd
+            .readable()
+            .await
+            .map(|_| ())
+            .map_err(|e| e.into())
     }
 
     pub fn packet_send(&self, data: &[u8]) -> LldpdResult<()> {

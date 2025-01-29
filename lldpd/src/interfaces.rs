@@ -21,7 +21,6 @@ use slog::error;
 use slog::info;
 use slog::trace;
 use slog::warn;
-use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
 use crate::errors::LldpdError;
@@ -436,12 +435,13 @@ async fn tx_lldpdu(
 
 // Construct and transmit a "shutting down" LLDPDU on this interface.
 async fn tx_shutdown(
-    switchinfo: &crate::SwitchInfo,
+    g: &Global,
     iface_lock: &Mutex<Interface>,
     transport: &Transport,
 ) {
     let log;
 
+    let switchinfo = g.switchinfo.lock().unwrap().clone();
     let packet = {
         let iface = iface_lock.lock().unwrap();
         log = iface.log.clone();
@@ -453,7 +453,7 @@ async fn tx_shutdown(
             return;
         }
 
-        build_shutdown_packet(switchinfo, &iface)
+        build_shutdown_packet(&switchinfo, &iface)
     };
 
     trace!(&log, "transmit shutdown LLDPDU");
@@ -471,7 +471,7 @@ enum WakeupEvent {
 
 async fn wait_for_event(
     msg_rx: &mut mpsc::Receiver<InterfaceMsg>,
-    asyncfd: &AsyncFd<i32>,
+    transport: &Option<Transport>,
     timeout: Instant,
 ) -> WakeupEvent {
     tokio::task::yield_now().await;
@@ -482,28 +482,41 @@ async fn wait_for_event(
         timeout - now
     };
 
-    #[rustfmt::skip]
-    tokio::select! {
-	msg = msg_rx.recv() => WakeupEvent::Message(msg
-	      .expect("channel shouldn't be dropped while the interface thread is alive")),
-	_ = asyncfd.readable() => WakeupEvent::FdReady,
-	_ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
+    if let Some(t) = transport.as_ref() {
+        #[rustfmt::skip]
+        tokio::select! {
+            msg = msg_rx.recv() => WakeupEvent::Message(msg
+              .expect("channel shouldn't be dropped while the interface thread is alive")),
+            _ = t.readable() => WakeupEvent::FdReady,
+            _ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
+        }
+    } else {
+        tokio::select! {
+            msg = msg_rx.recv() => WakeupEvent::Message(msg
+              .expect("channel shouldn't be dropped while the interface thread is alive")),
+            _ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
+        }
     }
 }
 
-// Open a transport (DLPI or pcap) on an interface and return a file descriptor
-// that tokio can poll() on.
-fn transport_init(iface: &str) -> LldpdResult<(Transport, AsyncFd<i32>)> {
-    let transport = plat::Transport::new(iface)?;
-    transport.get_poll_fd().and_then(|fd| {
-        tokio::io::unix::AsyncFd::new(fd)
-            .map_err(|e| {
-                LldpdError::Other(format!(
-                    "failed to wrap transport fd for tokio: {e:?}"
-                ))
-            })
-            .map(|asyncfd| (transport, asyncfd))
-    })
+fn process_ttl_expirations(iface_lock: &Mutex<Interface>) {
+    let now = Utc::now();
+    let mut iface = iface_lock.lock().unwrap();
+    let expired: Vec<types::NeighborId> = iface
+        .neighbors
+        .iter()
+        .filter(|(_id, n)| {
+            let ttl = Duration::from_secs(n.lldpdu.ttl as u64);
+            n.last_seen + ttl < now
+        })
+        .map(|(id, _n)| id.clone())
+        .collect();
+
+    for id in &expired {
+        info!(iface.log, "neighbor {id:?} TTL expired");
+        iface.neighbors.remove(id);
+        iface.stats.ageouts_total += 1;
+    }
 }
 
 // Clippy mistakenly believes that the returns in the map_err code below are
@@ -518,61 +531,60 @@ async fn interface_loop(
     let iface_name = iface_lock.lock().unwrap().iface.clone();
     let log = iface_lock.lock().unwrap().log.clone();
 
-    debug!(log, "Interface loop started");
-    let (transport, asyncfd) =
-        match transport_init(&iface_name) {
-            Ok((t, a)) => (t, a),
-            Err(e) => {
-                // TODO: add a "failed" state to interfaces in the hash so the
-                // client can retrieve an error message, rather than having them
-                // silently disappear
-                error!(log, "failed to init transport: {e:?}");
-                g.interfaces.lock().unwrap().remove(&name).expect(
-                    "interface hash entry should persist until task exits",
-                );
-                return;
-            }
-        };
-
     let mut buf = [0u8; 4096];
     let mut next_tx = Instant::now();
-    loop {
-        // Scan the neighbor list for any whose TTL has expired
-        {
-            let now = Utc::now();
-            let mut iface = iface_lock.lock().unwrap();
-            let expired: Vec<types::NeighborId> = iface
-                .neighbors
-                .iter()
-                .filter(|(_id, n)| {
-                    let ttl = Duration::from_secs(n.lldpdu.ttl as u64);
-                    n.last_seen + ttl < now
-                })
-                .map(|(id, _n)| id.clone())
-                .collect();
+    let mut transport: Option<Transport> = None;
 
-            for id in &expired {
-                info!(iface.log, "neighbor {id:?} TTL expired");
-                iface.neighbors.remove(id);
-                iface.stats.ageouts_total += 1;
+    debug!(log, "Interface loop started");
+    loop {
+        let disabled = iface_lock.lock().unwrap().disabled;
+        match (transport.is_some(), disabled) {
+            (true, true) => {
+                debug!(log, "Interface disabled - closing transport");
+                tx_shutdown(&g, &iface_lock, transport.as_ref().unwrap()).await;
+                transport = None;
+            }
+            (false, false) => {
+                debug!(log, "Opening transport");
+                transport = match plat::Transport::new(&iface_name) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        // TODO: add a "failed" state to interfaces in the hash so the
+                        // client can retrieve an error message, rather than having them
+                        // silently disappear
+                        error!(log, "failed to init transport: {e:?}");
+                        None
+                    }
+                }
+            }
+            (_, _) => {
+                // Nothing to do
             }
         }
 
-        // Is it time for another advertisement?
-        if Instant::now() > next_tx {
-            let switchinfo = g.switchinfo.lock().unwrap().clone();
-            let ticks = tx_lldpdu(&switchinfo, &iface_lock, &transport).await;
-            next_tx = Instant::now() + Duration::from_secs(ticks as u64);
+        process_ttl_expirations(&iface_lock);
+
+        if let Some(t) = transport.as_ref() {
+            // Is it time for another advertisement?
+            if Instant::now() > next_tx {
+                let switchinfo = g.switchinfo.lock().unwrap().clone();
+                let ticks = tx_lldpdu(&switchinfo, &iface_lock, &t).await;
+                next_tx = Instant::now() + Duration::from_secs(ticks as u64);
+            }
         }
 
-        match wait_for_event(&mut msg_rx, &asyncfd, next_tx).await {
+        match wait_for_event(&mut msg_rx, &transport, next_tx).await {
             WakeupEvent::Message(msg) => match msg {
                 InterfaceMsg::TimeToGo => break,
                 // TODO-completeness: use the tx_credit mechanism to avoid
                 // spamming if we have a lot of updates in quick succession.
                 InterfaceMsg::UpdatedInfo => next_tx = Instant::now(),
             },
-            WakeupEvent::FdReady => match transport.packet_recv(&mut buf) {
+            WakeupEvent::FdReady => match transport
+                .as_ref()
+                .expect("FdReady is only possible if transport exists")
+                .packet_recv(&mut buf)
+            {
                 Ok(None) => { /* spurious wakeup? */ }
                 Ok(Some(n)) => {
                     let switchinfo = g.switchinfo.lock().unwrap().clone();
@@ -608,8 +620,9 @@ async fn interface_loop(
         }
     }
 
-    let switchinfo = g.switchinfo.lock().unwrap().clone();
-    tx_shutdown(&switchinfo, &iface_lock, &transport).await;
+    if let Some(t) = &transport {
+        tx_shutdown(&g, &iface_lock, t).await;
+    }
 
     debug!(log, "interface loop shutting down");
     g.interfaces
