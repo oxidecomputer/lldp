@@ -90,9 +90,8 @@ mod pcap {
 
             unsafe {
                 let mut err = [0i8; PCAP_ERRBUF_SIZE];
-                ffi::pcap_set_timeout(self.lib_hdl, 1)
+                ffi::pcap_set_timeout(self.lib_hdl, 10)
                     .error_check(self.lib_hdl)?;
-                ffi::pcap_setnonblock(self.lib_hdl, 1, err.as_mut_ptr());
                 ffi::pcap_activate(self.lib_hdl).error_check(self.lib_hdl)?;
                 let fd = ffi::pcap_get_selectable_fd(self.lib_hdl);
                 if fd >= 0 {
@@ -204,7 +203,7 @@ impl Transport {
         let pcap_in = pcap_open(iface).map_err(|e| {
             LldpdError::Pcap(format!("failed to open inbound pcap: {e:?}"))
         })?;
-        let in_fd = self.pcap_in.raw_fd();
+        let in_fd = pcap_in.raw_fd();
         let asyncfd = AsyncFd::new(in_fd)
             .map_err(|e| LldpdError::Other(e.to_string()))?;
         pcap_open(iface)
