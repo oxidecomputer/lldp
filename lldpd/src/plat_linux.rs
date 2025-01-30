@@ -8,6 +8,7 @@ use crate::types::LldpdResult;
 use crate::Global;
 use crate::LldpdError;
 use common::MacAddr;
+use tokio::io::unix::AsyncFd;
 
 mod pcap {
     use crate::ffi;
@@ -183,6 +184,7 @@ mod pcap {
 pub struct Transport {
     pcap_in: pcap::Pcap,
     pcap_out: pcap::Pcap,
+    asyncfd: AsyncFd<i32>,
 }
 
 fn pcap_open(iface: &str) -> LldpdResult<pcap::Pcap> {
@@ -202,15 +204,26 @@ impl Transport {
         let pcap_in = pcap_open(iface).map_err(|e| {
             LldpdError::Pcap(format!("failed to open inbound pcap: {e:?}"))
         })?;
+        let in_fd = self.pcap_in.raw_fd();
+        let asyncfd = AsyncFd::new(in_fd)
+            .map_err(|e| LldpdError::Other(e.to_string()))?;
         pcap_open(iface)
             .map_err(|e| {
                 LldpdError::Pcap(format!("failed to open inbound pcap: {e:?}"))
             })
-            .map(|pcap_out| Transport { pcap_in, pcap_out })
+            .map(|pcap_out| Transport {
+                pcap_in,
+                pcap_out,
+                asyncfd,
+            })
     }
 
-    pub fn get_poll_fd(&self) -> LldpdResult<i32> {
-        Ok(self.pcap_in.raw_fd())
+    pub async fn readable(&self) -> LldpdResult<()> {
+        self.asyncfd
+            .readable()
+            .await
+            .map(|_| ())
+            .map_err(|e| e.into())
     }
 
     pub fn packet_send(&self, data: &[u8]) -> LldpdResult<()> {

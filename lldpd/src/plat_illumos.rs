@@ -105,8 +105,8 @@ pub async fn get_iface_and_mac(
 }
 
 pub struct Transport {
-    dlpi_in: dlpi::DlpiHandle,
-    dlpi_out: dlpi::DlpiHandle,
+    dlpi_in: dlpi::DropHandle,
+    dlpi_out: dlpi::DropHandle,
     asyncfd: AsyncFd<i32>,
 }
 
@@ -133,17 +133,16 @@ impl Transport {
                         "failed to set promisc on {iface}: {e:?}"
                     ))
                 })
-                .map(|_| hdl)
+                .map(|_| dlpi::DropHandle(hdl))
         })?;
+        let dlpi_out = dlpi_open(iface).map(dlpi::DropHandle)?;
 
-        let fd = match unsafe { dlpi::sys::dlpi_fd(dlpi_in.0) } {
-            -1 => Err(LldpdError::Dlpi("invalid handle".to_string())),
-            fd => Ok(fd),
-        }?;
-        let asyncfd =
-            AsyncFd::new(fd).map_err(|e| LldpdError::Other(e.to_string()))?;
+        let in_fd =
+            dlpi_in.fd().map_err(|e| LldpdError::Dlpi(e.to_string()))?;
+        let asyncfd = AsyncFd::new(in_fd)
+            .map_err(|e| LldpdError::Other(e.to_string()))?;
 
-        dlpi_open(iface).map(|dlpi_out| Transport {
+        Ok(Transport {
             dlpi_in,
             dlpi_out,
             asyncfd,
@@ -160,13 +159,13 @@ impl Transport {
 
     pub fn packet_send(&self, data: &[u8]) -> LldpdResult<()> {
         let dummy = [0u8; 0];
-        dlpi::send(self.dlpi_out, &dummy, data, None)
+        dlpi::send(self.dlpi_out.0, &dummy, data, None)
             .map_err(|e| LldpdError::Dlpi(e.to_string()))
     }
 
     pub fn packet_recv(&self, buf: &mut [u8]) -> LldpdResult<Option<usize>> {
         let mut src = [0u8; dlpi::sys::DLPI_PHYSADDR_MAX];
-        dlpi::recv(self.dlpi_in, &mut src, buf, -1, None)
+        dlpi::recv(self.dlpi_in.0, &mut src, buf, -1, None)
             .map(|(_, len)| Some(len))
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::Interrupted => LldpdError::EIntr,

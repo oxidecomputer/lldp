@@ -541,7 +541,6 @@ async fn interface_loop(
         match (transport.is_some(), disabled) {
             (true, true) => {
                 debug!(log, "Interface disabled - closing transport");
-                tx_shutdown(&g, &iface_lock, transport.as_ref().unwrap()).await;
                 transport = None;
             }
             (false, false) => {
@@ -568,7 +567,7 @@ async fn interface_loop(
             // Is it time for another advertisement?
             if Instant::now() > next_tx {
                 let switchinfo = g.switchinfo.lock().unwrap().clone();
-                let ticks = tx_lldpdu(&switchinfo, &iface_lock, &t).await;
+                let ticks = tx_lldpdu(&switchinfo, &iface_lock, t).await;
                 next_tx = Instant::now() + Duration::from_secs(ticks as u64);
             }
         }

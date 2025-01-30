@@ -35,37 +35,16 @@ struct GlobalOpts {
 
 #[derive(Debug, StructOpt)]
 enum IfaceSetProp {
-    Disabled {
-        iface: String,
-    },
-    Enabled {
-        iface: String,
-    },
     #[structopt(visible_alias = "cid")]
-    ChassisId {
-        iface: String,
-        chassis_id: String,
-    },
+    ChassisId { iface: String, chassis_id: String },
     #[structopt(visible_alias = "pid")]
-    PortId {
-        iface: String,
-        id: String,
-    },
+    PortId { iface: String, id: String },
     #[structopt(visible_alias = "portdesc")]
-    PortDescription {
-        iface: String,
-        desc: String,
-    },
+    PortDescription { iface: String, desc: String },
     #[structopt(visible_alias = "sysname")]
-    SystemName {
-        iface: String,
-        name: String,
-    },
+    SystemName { iface: String, name: String },
     #[structopt(visible_alias = "sysdesc")]
-    SystemDescription {
-        iface: String,
-        desc: String,
-    },
+    SystemDescription { iface: String, desc: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -143,6 +122,12 @@ enum Interface {
     /// List all configured interfaces
     #[structopt(visible_alias = "ls")]
     List,
+    /// Locally disable lldp on the interface.  This refers strictly to
+    /// local interface plumbing, and is independent of the LLDP protocol's
+    /// administrative tx/rx disablement.
+    Disable { iface: String },
+    /// Clear the locally set disable flag.
+    Enable { iface: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -367,12 +352,6 @@ async fn interface_prop(
 ) -> anyhow::Result<()> {
     match prop {
         IfaceProp::Set(set) => match set {
-            IfaceSetProp::Disabled { iface } => {
-                client.interface_set_disabled(&iface, true).await
-            }
-            IfaceSetProp::Enabled { iface } => {
-                client.interface_set_disabled(&iface, false).await
-            }
             IfaceSetProp::ChassisId { iface, chassis_id } => {
                 // TODO-completeness: allow for different kinds of chassis IDs
                 let id = types::ChassisId::ChassisComponent(chassis_id);
@@ -500,6 +479,16 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .map(|r| r.into_inner().iter().for_each(display_interface))
                 .context("failed to remove interface"),
+            Interface::Disable { iface } => client
+                .interface_set_disabled(&iface, true)
+                .await
+                .map(|_| ())
+                .context("failed to set the disabled flag"),
+            Interface::Enable { iface } => client
+                .interface_set_disabled(&iface, false)
+                .await
+                .map(|_| ())
+                .context("failed to clear the disabled flag"),
         },
         Commands::Neighbors => {
             for iface in client
