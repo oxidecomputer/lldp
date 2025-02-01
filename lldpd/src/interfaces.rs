@@ -463,6 +463,7 @@ async fn tx_shutdown(
     }
 }
 
+#[derive(Debug)]
 enum WakeupEvent {
     Message(InterfaceMsg),
     FdReady,
@@ -482,7 +483,7 @@ async fn wait_for_event(
         timeout - now
     };
 
-    if let Some(t) = transport.as_ref() {
+    let ev = if let Some(t) = transport.as_ref() {
         #[rustfmt::skip]
         tokio::select! {
             msg = msg_rx.recv() => WakeupEvent::Message(msg
@@ -496,7 +497,8 @@ async fn wait_for_event(
               .expect("channel shouldn't be dropped while the interface thread is alive")),
             _ = tokio::time::sleep(delay) => WakeupEvent::Timeout,
         }
-    }
+    };
+    ev
 }
 
 fn process_ttl_expirations(iface_lock: &Mutex<Interface>) {
@@ -563,12 +565,14 @@ async fn interface_loop(
 
         process_ttl_expirations(&iface_lock);
 
-        if let Some(t) = transport.as_ref() {
-            // Is it time for another advertisement?
-            if Instant::now() > next_tx {
+        // Is it time for another advertisement?
+        if Instant::now() > next_tx {
+            if let Some(t) = transport.as_ref() {
                 let switchinfo = g.switchinfo.lock().unwrap().clone();
                 let ticks = tx_lldpdu(&switchinfo, &iface_lock, t).await;
                 next_tx = Instant::now() + Duration::from_secs(ticks as u64);
+            } else {
+                next_tx = Instant::now() + Duration::from_secs(30u64);
             }
         }
 
@@ -606,6 +610,9 @@ async fn interface_loop(
                 }
                 Err(LldpdError::EIntr) => {
                     error!(log, "listener interrupted");
+                    // no action, just try again
+                }
+                Err(LldpdError::ETimedOut) => {
                     // no action, just try again
                 }
                 Err(e) => {

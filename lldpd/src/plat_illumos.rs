@@ -165,10 +165,28 @@ impl Transport {
 
     pub fn packet_recv(&self, buf: &mut [u8]) -> LldpdResult<Option<usize>> {
         let mut src = [0u8; dlpi::sys::DLPI_PHYSADDR_MAX];
-        dlpi::recv(self.dlpi_in.0, &mut src, buf, -1, None)
+        // In the calling code, we only get here if the underlying fd is
+        // readable(), but apparently that doesn't mean that there is actually
+        // data available.  Thus, we set a 1 second timeout to ensure that we
+        // don't block on this recv indefinitely.
+        dlpi::recv(self.dlpi_in.0, &mut src, buf, 1000, None)
             .map(|(_, len)| Some(len))
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::Interrupted => LldpdError::EIntr,
+                std::io::ErrorKind::Other => {
+                    // One would expect dlpi-sys to return
+                    // `ErrorKind::Timedout`, but it buries it in an Other
+                    // for some reason.
+                    if let Ok(r) = e.downcast::<dlpi::ResultCode>() {
+                        if r == dlpi::ResultCode::ETimedout {
+                            LldpdError::ETimedOut
+                        } else {
+                            LldpdError::Dlpi(r.to_string())
+                        }
+                    } else {
+                        LldpdError::Dlpi("malformed DLPI error".into())
+                    }
+                }
                 _ => LldpdError::Dlpi(e.to_string()),
             })
     }
