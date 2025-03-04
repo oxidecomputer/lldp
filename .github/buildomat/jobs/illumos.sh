@@ -3,7 +3,7 @@
 #: name = "illumos"
 #: variety = "basic"
 #: target = "helios-2.0"
-#: rust_toolchain = "stable"
+#: rust_toolchain = true
 #: output_rules = [
 #:   "/out/*",
 #: ]
@@ -40,6 +40,11 @@ function archive {
     mv out/$1$2 /out/$1$2
     digest -a sha256 /out/$1$2 > /out/$1.sha256.txt
 }
+
+# Install the active Rust toolchain from rust-toolchain.toml. We need this
+# because `rustup` version 1.28 made it where the toolchain is not installed by
+# default.
+rustup show active-toolchain || rustup toolchain install
 
 banner "openapi"
 ./tools/ci_download_dendrite_openapi

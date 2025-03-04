@@ -9,6 +9,11 @@ set -o errexit
 set -o pipefail
 set -o xtrace
 
+# Install the active Rust toolchain from rust-toolchain.toml. We need this
+# because `rustup` version 1.28 made it where the toolchain is not installed by
+# default.
+rustup show active-toolchain || rustup toolchain install
+
 banner "openapi"
 ./tools/ci_download_dendrite_openapi
 
