@@ -35,6 +35,8 @@ pub enum LldpdError {
     Dlpi(String),
     #[error("Interrupted system call")]
     EIntr,
+    #[error("packet read timed out")]
+    ETimedOut,
     #[error("error: {0}")]
     Other(String),
 }
@@ -90,6 +92,9 @@ impl convert::From<LldpdError> for dropshot::HttpError {
             LldpdError::Smf(e) => dropshot::HttpError::for_internal_error(e),
             LldpdError::EIntr => dropshot::HttpError::for_internal_error(
                 "interrupted system call".into(),
+            ),
+            LldpdError::ETimedOut => dropshot::HttpError::for_internal_error(
+                "network timeout".into(),
             ),
             LldpdError::Other(e) => dropshot::HttpError::for_internal_error(e),
         }

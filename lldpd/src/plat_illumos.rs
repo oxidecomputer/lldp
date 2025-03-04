@@ -5,6 +5,7 @@
 // Copyright 2024 Oxide Computer Company
 
 use std::collections::BTreeMap;
+use tokio::io::unix::AsyncFd;
 use tokio::process::Command;
 
 use crate::types::LldpdResult;
@@ -104,8 +105,9 @@ pub async fn get_iface_and_mac(
 }
 
 pub struct Transport {
-    dlpi_in: dlpi::DlpiHandle,
-    dlpi_out: dlpi::DlpiHandle,
+    dlpi_in: dlpi::DropHandle,
+    dlpi_out: dlpi::DropHandle,
+    asyncfd: AsyncFd<i32>,
 }
 
 fn dlpi_open(iface: &str) -> LldpdResult<dlpi::DlpiHandle> {
@@ -131,31 +133,60 @@ impl Transport {
                         "failed to set promisc on {iface}: {e:?}"
                     ))
                 })
-                .map(|_| hdl)
+                .map(|_| dlpi::DropHandle(hdl))
         })?;
+        let dlpi_out = dlpi_open(iface).map(dlpi::DropHandle)?;
 
-        dlpi_open(iface).map(|dlpi_out| Transport { dlpi_in, dlpi_out })
+        let in_fd =
+            dlpi_in.fd().map_err(|e| LldpdError::Dlpi(e.to_string()))?;
+        let asyncfd = AsyncFd::new(in_fd)
+            .map_err(|e| LldpdError::Other(e.to_string()))?;
+
+        Ok(Transport {
+            dlpi_in,
+            dlpi_out,
+            asyncfd,
+        })
     }
 
-    pub fn get_poll_fd(&self) -> LldpdResult<i32> {
-        match unsafe { dlpi::sys::dlpi_fd(self.dlpi_in.0) } {
-            -1 => Err(LldpdError::Dlpi("invalid handle".to_string())),
-            fd => Ok(fd),
-        }
+    pub async fn readable(&self) -> LldpdResult<()> {
+        self.asyncfd
+            .readable()
+            .await
+            .map(|_| ())
+            .map_err(|e| e.into())
     }
 
     pub fn packet_send(&self, data: &[u8]) -> LldpdResult<()> {
         let dummy = [0u8; 0];
-        dlpi::send(self.dlpi_out, &dummy, data, None)
+        dlpi::send(self.dlpi_out.0, &dummy, data, None)
             .map_err(|e| LldpdError::Dlpi(e.to_string()))
     }
 
     pub fn packet_recv(&self, buf: &mut [u8]) -> LldpdResult<Option<usize>> {
         let mut src = [0u8; dlpi::sys::DLPI_PHYSADDR_MAX];
-        dlpi::recv(self.dlpi_in, &mut src, buf, -1, None)
+        // In the calling code, we only get here if the underlying fd is
+        // readable(), but apparently that doesn't mean that there is actually
+        // data available.  Thus, we set a 1 second timeout to ensure that we
+        // don't block on this recv indefinitely.
+        dlpi::recv(self.dlpi_in.0, &mut src, buf, 1000, None)
             .map(|(_, len)| Some(len))
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::Interrupted => LldpdError::EIntr,
+                std::io::ErrorKind::Other => {
+                    // One would expect dlpi-sys to return
+                    // `ErrorKind::Timedout`, but it buries it in an Other
+                    // for some reason.
+                    if let Ok(r) = e.downcast::<dlpi::ResultCode>() {
+                        if r == dlpi::ResultCode::ETimedout {
+                            LldpdError::ETimedOut
+                        } else {
+                            LldpdError::Dlpi(r.to_string())
+                        }
+                    } else {
+                        LldpdError::Dlpi("malformed DLPI error".into())
+                    }
+                }
                 _ => LldpdError::Dlpi(e.to_string()),
             })
     }

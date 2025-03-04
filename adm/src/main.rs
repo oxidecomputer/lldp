@@ -122,6 +122,12 @@ enum Interface {
     /// List all configured interfaces
     #[structopt(visible_alias = "ls")]
     List,
+    /// Locally disable lldp on the interface.  This refers strictly to
+    /// local interface plumbing, and is independent of the LLDP protocol's
+    /// administrative tx/rx disablement.
+    Disable { iface: String },
+    /// Clear the locally set disable flag.
+    Enable { iface: String },
 }
 
 #[derive(Debug, StructOpt)]
@@ -328,7 +334,15 @@ fn display_neighbor(n: &types::Neighbor) {
 }
 
 fn display_interface(i: &types::Interface) {
-    println!("port: {} interface: {}", i.port, i.iface);
+    println!(
+        "port: {} interface: {}{}",
+        i.port,
+        i.iface,
+        match i.disabled {
+            true => " [Disabled]",
+            false => "",
+        }
+    );
     display_sysinfo(&i.system_info);
 }
 
@@ -465,6 +479,16 @@ async fn main() -> anyhow::Result<()> {
                 .await
                 .map(|r| r.into_inner().iter().for_each(display_interface))
                 .context("failed to remove interface"),
+            Interface::Disable { iface } => client
+                .interface_set_disabled(&iface, true)
+                .await
+                .map(|_| ())
+                .context("failed to set the disabled flag"),
+            Interface::Enable { iface } => client
+                .interface_set_disabled(&iface, false)
+                .await
+                .map(|_| ())
+                .context("failed to clear the disabled flag"),
         },
         Commands::Neighbors => {
             for iface in client
