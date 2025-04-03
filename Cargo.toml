@@ -17,7 +17,7 @@ lldpd-client = { path = "lldpd-client" }
 common = { path = "common" }
 
 # oxide dependencies from github
-dpd-client = { git = "https://github.com/oxidecomputer/dendrite" , branch = "port"}
+dpd-client = { git = "https://github.com/oxidecomputer/dendrite"}
 
 # public dependencies from crates.io
 anyhow = "1.0"

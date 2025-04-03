@@ -115,7 +115,7 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 [[package]]
 name = "api_identity"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "omicron-workspace-hack",
  "proc-macro2",
@@ -507,7 +507,7 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/dendrite?branch=port#910f6ac049348b2d1e825cfba20e3200a009acde"
+source = "git+https://github.com/oxidecomputer/dendrite#270dc8eb421b8514bf1ed00ab956025dc326b9df"
 dependencies = [
  "anyhow",
  "chrono",
@@ -763,11 +763,11 @@ dependencies = [
 [[package]]
 name = "dpd-client"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/dendrite?branch=port#910f6ac049348b2d1e825cfba20e3200a009acde"
+source = "git+https://github.com/oxidecomputer/dendrite#270dc8eb421b8514bf1ed00ab956025dc326b9df"
 dependencies = [
  "async-trait",
  "chrono",
- "common 0.1.0 (git+https://github.com/oxidecomputer/dendrite?branch=port)",
+ "common 0.1.0 (git+https://github.com/oxidecomputer/dendrite)",
  "crc8",
  "futures",
  "http 1.3.1",
@@ -2228,7 +2228,7 @@ dependencies = [
 [[package]]
 name = "omicron-common"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "anyhow",
  "api_identity",
@@ -2270,7 +2270,7 @@ dependencies = [
 [[package]]
 name = "omicron-uuid-kinds"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "daft",
  "newtype-uuid",
@@ -2380,7 +2380,7 @@ dependencies = [
 [[package]]
 name = "oximeter"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2399,7 +2399,7 @@ dependencies = [
 [[package]]
 name = "oximeter-macro-impl"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "omicron-workspace-hack",
  "proc-macro2",
@@ -2410,7 +2410,7 @@ dependencies = [
 [[package]]
 name = "oximeter-schema"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2431,7 +2431,7 @@ dependencies = [
 [[package]]
 name = "oximeter-timeseries-macro"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "omicron-workspace-hack",
  "oximeter-schema",
@@ -2444,7 +2444,7 @@ dependencies = [
 [[package]]
 name = "oximeter-types"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/omicron?branch=main#0dad016506a8676135cd3a1144b70a65feb0a5c3"
+source = "git+https://github.com/oxidecomputer/omicron?branch=main#1a1f2c6865b7a31ef223e0bd3520ca628416dd35"
 dependencies = [
  "bytes",
  "chrono",
@@ -4160,7 +4160,7 @@ dependencies = [
 [[package]]
 name = "transceiver-controller"
 version = "0.1.1"
-source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#174386abfc9ffe8104601705f8c6d51e590dfe0c"
+source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#7ebff6ecdd78b5dfc2a4ae7af780f04638a3a637"
 dependencies = [
  "anyhow",
  "clap 4.5.34",
@@ -4184,7 +4184,7 @@ dependencies = [
 [[package]]
 name = "transceiver-decode"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#174386abfc9ffe8104601705f8c6d51e590dfe0c"
+source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#7ebff6ecdd78b5dfc2a4ae7af780f04638a3a637"
 dependencies = [
  "schemars",
  "serde",
@@ -4196,7 +4196,7 @@ dependencies = [
 [[package]]
 name = "transceiver-messages"
 version = "0.1.1"
-source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#174386abfc9ffe8104601705f8c6d51e590dfe0c"
+source = "git+https://github.com/oxidecomputer/transceiver-control?branch=main#7ebff6ecdd78b5dfc2a4ae7af780f04638a3a637"
 dependencies = [
  "bitflags 2.6.0",
  "clap 4.5.34",
@@ -4215,10 +4215,10 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tufaceous-artifact"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/tufaceous?branch=main#b813aa819b7a1bd42a7295ba6bc71f06f51ccbb9"
+source = "git+https://github.com/oxidecomputer/tufaceous?branch=main#73145c2795adabe2f97d4e000b0b0515ad6c7afe"
 dependencies = [
  "daft",
- "parse-display",
+ "hex",
  "proptest",
  "schemars",
  "semver",
