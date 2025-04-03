@@ -14,9 +14,6 @@ set -o xtrace
 # default.
 rustup show active-toolchain || rustup toolchain install
 
-banner "openapi"
-./tools/ci_download_dendrite_openapi
-
 banner "clippy"
 for feat in smf dendrite
 do

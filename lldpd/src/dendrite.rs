@@ -46,7 +46,7 @@ pub async fn dpd_tfport(
         .map_err(|e| LldpdError::DpdClientError(e.to_string()))?;
     let iface = format!("tfport{port_id}_{link_id}");
     let mac = link_info.into_inner().address;
-    Ok((iface, mac))
+    Ok((iface, mac.into()))
 }
 
 async fn dpd_version(log: &slog::Logger, client: &Client) -> String {
@@ -121,7 +121,7 @@ mod dendrite_smf {
             .dpd
             .as_ref()
             .expect("monitor only runs if dpd is set up")
-            .link_list_all()
+            .link_list_all(None)
             .await
             .map_err(|e| LldpdError::DpdClientError(e.to_string()))?
             .into_inner()
@@ -190,7 +190,7 @@ pub async fn dpd_init(
         None
     } else {
         let host = opts.host.unwrap_or_else(|| "localhost".to_string());
-        let port = opts.port.unwrap_or(dpd_client::DEFAULT_PORT);
+        let port = opts.port.unwrap_or(dpd_client::default_port());
         info!(log, "connecting to dpd at {host}:{port}");
         let client_state = ClientState {
             tag: String::from("lldpd"),

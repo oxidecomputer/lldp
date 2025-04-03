@@ -56,6 +56,12 @@ impl From<[u8; 6]> for MacAddr {
     }
 }
 
+impl From<dpd_client::types::MacAddr> for MacAddr {
+    fn from(a: dpd_client::types::MacAddr) -> Self {
+        a.a.into()
+    }
+}
+
 impl MacAddr {
     pub const ZERO: Self = MacAddr {
         a: [0, 0, 0, 0, 0, 0],
