@@ -2815,11 +2815,6 @@ dependencies = [
  "anyhow",
  "schemars",
  "serde",
- "serde_json",
- "slog",
- "slog-async",
- "slog-bunyan",
- "slog-term",
  "thiserror 1.0.69",
 ]
 
