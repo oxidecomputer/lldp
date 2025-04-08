@@ -37,10 +37,10 @@ use slog::info;
 use slog::o;
 
 use crate::interfaces;
-use crate::protocol;
 use crate::types;
 use crate::Global;
 use crate::LldpdError;
+use protocol::types as protocol;
 
 type ApiServer = dropshot::HttpServer<Arc<Global>>;
 

@@ -12,6 +12,7 @@ smf = [ "dep:smf-rs" ]
 anyhow.workspace = true
 chrono.workspace = true
 common.workspace = true
+protocol.workspace = true
 dpd-client.workspace = true
 dropshot.workspace = true
 http.workspace = true

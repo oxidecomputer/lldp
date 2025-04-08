@@ -24,8 +24,6 @@ pub use types::LldpdResult;
 mod api_server;
 mod errors;
 mod interfaces;
-mod packet;
-mod protocol;
 mod types;
 
 #[cfg(feature = "dendrite")]
@@ -77,7 +75,7 @@ impl Global {
 
 #[derive(Debug, Clone)]
 pub struct SwitchInfo {
-    pub chassis_id: protocol::ChassisId,
+    pub chassis_id: protocol::types::ChassisId,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub management_addrs: BTreeSet<IpAddr>,
@@ -192,7 +190,7 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
         None => get_uname("-a"),
     };
     SwitchInfo {
-        chassis_id: protocol::ChassisId::ChassisComponent(chassis_id),
+        chassis_id: protocol::types::ChassisId::ChassisComponent(chassis_id),
         system_name: Some(system_name),
         system_description: Some(system_description),
         management_addrs: BTreeSet::new(),

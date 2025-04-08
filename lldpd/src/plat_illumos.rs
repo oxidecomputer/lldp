@@ -11,7 +11,7 @@ use tokio::process::Command;
 use crate::types::LldpdResult;
 use crate::Global;
 use crate::LldpdError;
-use common::MacAddr;
+use protocol::macaddr::MacAddr;
 
 const DLADM: &str = "/usr/sbin/dladm";
 
@@ -116,7 +116,7 @@ fn dlpi_open(iface: &str) -> LldpdResult<dlpi::DlpiHandle> {
             LldpdError::Dlpi(format!("failed to bind recv to LLDP: {e:?}"))
         })
         .and_then(|hdl| {
-            dlpi::bind(hdl, crate::packet::ETHER_LLDP as u32)
+            dlpi::bind(hdl, protocol::packet::ETHER_LLDP as u32)
                 .map(|_| hdl)
                 .map_err(|e| {
                     LldpdError::Dlpi(format!("failed to open {iface}: {e:?}"))

@@ -24,15 +24,14 @@ use slog::warn;
 use tokio::sync::mpsc;
 
 use crate::errors::LldpdError;
-use crate::packet::LldpTlv;
-use crate::packet::Packet;
-use crate::protocol;
 use crate::types;
 use crate::types::LldpdResult;
 use crate::Global;
-use common::MacAddr;
 use plat::Transport;
-use protocol::Lldpdu;
+use protocol::macaddr::MacAddr;
+use protocol::packet::LldpTlv;
+use protocol::packet::Packet;
+use protocol::types::Lldpdu;
 
 #[cfg(target_os = "illumos")]
 use crate::plat_illumos as plat;
@@ -59,8 +58,8 @@ pub struct Interface {
     pub disabled: bool,
 
     /// Configurable properties
-    pub chassis_id: Option<protocol::ChassisId>,
-    pub port_id: protocol::PortId,
+    pub chassis_id: Option<protocol::types::ChassisId>,
+    pub port_id: protocol::types::PortId,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
@@ -114,8 +113,8 @@ pub struct Interface {
 /// Settings that can be updated via SMF
 #[derive(Debug)]
 pub struct InterfaceCfg {
-    pub chassis_id: Option<protocol::ChassisId>,
-    pub port_id: Option<protocol::PortId>,
+    pub chassis_id: Option<protocol::types::ChassisId>,
+    pub port_id: Option<protocol::types::PortId>,
     pub system_name: Option<String>,
     pub system_description: Option<String>,
     pub port_description: Option<String>,
@@ -221,7 +220,7 @@ pub fn build_lldpdu(
     // TODO-completeness: the available and enabled capabilities should be
     // configurable - not just hardcoded as "Router".
     let mut avail = BTreeSet::new();
-    avail.insert(protocol::SystemCapabilities::Router);
+    avail.insert(protocol::types::SystemCapabilities::Router);
     let enabled = avail.clone();
 
     // The advertised TTL is derived by multiplying the tx_interval by the
@@ -237,11 +236,11 @@ pub fn build_lldpdu(
         .as_ref()
         .unwrap_or(&switchinfo.management_addrs)
         .iter()
-        .map(|addr| protocol::ManagementAddress {
+        .map(|addr| protocol::types::ManagementAddress {
             addr: *addr,
             // TODO-completeness: include an interface number with each
             // management address.
-            interface_num: protocol::InterfaceNum::Unknown(0),
+            interface_num: protocol::types::InterfaceNum::Unknown(0),
             oid: None,
         })
         .collect();
@@ -279,7 +278,7 @@ fn build_lldpdu_packet(
         .try_into()
         .expect(&format!("we constructed an invalid LLDPDU: {lldpdu:#?}"));
 
-    let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
+    let tgt_mac: MacAddr = protocol::types::Scope::Bridge.into();
     let mut packet = Packet::new(tgt_mac, iface.mac);
     tlvs.iter().for_each(|tlv| packet.add_tlv(tlv));
 
@@ -298,14 +297,14 @@ fn build_shutdown_packet(
         .try_into()
         .expect(&format!("we constructed an invalid LLDPDU: {lldpdu:#?}"));
 
-    let tgt_mac: MacAddr = protocol::Scope::Bridge.into();
+    let tgt_mac: MacAddr = protocol::types::Scope::Bridge.into();
     let mut packet = Packet::new(tgt_mac, iface.mac);
     // The first two TLVs in a a load-bearing lldpdu contain the chassis_id and
     // port_id.  The shutdown lldpdu we want to send will consist of those two
     // TLVs and a TLV with a TTL of 0.
     packet.add_tlv(&tlvs[0]);
     packet.add_tlv(&tlvs[1]);
-    packet.add_tlv(&protocol::ttl_to_tlv(0));
+    packet.add_tlv(&protocol::types::ttl_to_tlv(0));
 
     packet
 }
@@ -318,7 +317,7 @@ async fn xmit_lldpdu(transport: &Transport, packet: Packet) -> LldpdResult<()> {
 }
 
 // Bump error statistics when receiving a bad packet
-fn error_accounting(iface: &mut Interface, _error: LldpdError) {
+fn error_accounting(iface: &mut Interface, _error: protocol::Error) {
     iface.stats.frames_in_errors_total += 1;
     iface.stats.frames_discarded_total += 1;
 }
@@ -647,7 +646,7 @@ pub async fn interface_add(
 
     let port_id = cfg
         .port_id
-        .unwrap_or(protocol::PortId::InterfaceName(name.to_string()));
+        .unwrap_or(protocol::types::PortId::InterfaceName(name.to_string()));
     let (iface, mac) = plat::get_iface_and_mac(global, &name).await?;
 
     let mut iface_hash = global.interfaces.lock().unwrap();
@@ -840,7 +839,7 @@ pub async fn disabled_set(
 pub async fn chassis_id_set(
     g: &Global,
     name: &String,
-    chassis_id: protocol::ChassisId,
+    chassis_id: protocol::types::ChassisId,
 ) -> LldpdResult<()> {
     info!(g.log, "setting interface-level chassis ID";
 	    "iface" => name, "chassis_id" => chassis_id.to_string());
@@ -865,7 +864,7 @@ pub async fn chassis_id_del(g: &Global, name: &String) -> LldpdResult<()> {
 pub async fn port_id_set(
     g: &Global,
     name: &String,
-    port_id: protocol::PortId,
+    port_id: protocol::types::PortId,
 ) -> LldpdResult<()> {
     info!(g.log, "setting port ID";
 	    "iface" => name, "port_id" => port_id.to_string());
