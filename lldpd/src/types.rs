@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::errors;
-use crate::protocol;
+use protocol::types as protocol;
 
 pub type LldpdResult<T> = Result<T, errors::LldpdError>;
 

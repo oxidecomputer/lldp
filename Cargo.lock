@@ -1897,6 +1897,7 @@ dependencies = [
  "dpd-client",
  "dropshot 0.10.1",
  "http 0.2.12",
+ "protocol",
  "schemars",
  "serde",
  "signal-hook",
@@ -2805,6 +2806,21 @@ dependencies = [
  "rusty-fork",
  "tempfile",
  "unarray",
+]
+
+[[package]]
+name = "protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "schemars",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "slog-bunyan",
+ "slog-term",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -17,10 +17,10 @@ use smf_rs::Snapshot;
 use super::interfaces;
 use super::types;
 use crate::interfaces::InterfaceCfg;
-use crate::protocol::ChassisId;
-use crate::protocol::PortId;
 use crate::types::LldpdResult;
 use crate::LldpdError;
+use protocol::types::ChassisId;
+use protocol::types::PortId;
 
 // Given a property name within a group, return all the associated values as
 // a vec of strings.

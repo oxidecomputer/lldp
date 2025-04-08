@@ -4,10 +4,10 @@
 
 // Copyright 2024 Oxide Computer Company
 
-use common::MacAddr;
+use anyhow::anyhow;
 
-use crate::errors::LldpdError;
-use crate::types::LldpdResult;
+use crate::macaddr::MacAddr;
+use crate::types::Result;
 
 pub const ETHER_VLAN: u16 = 0x8100;
 pub const ETHER_LLDP: u16 = 0x88cc;
@@ -35,7 +35,7 @@ impl Packet {
         }
     }
 
-    pub fn parse(data: &[u8]) -> LldpdResult<Option<Packet>> {
+    pub fn parse(data: &[u8]) -> Result<Option<Packet>> {
         let (mut eth_hdr, bytes) = EthHdr::parse(data)?;
         if eth_hdr.eth_type != ETHER_LLDP {
             Ok(None)
@@ -91,9 +91,9 @@ pub struct EthHdr {
 }
 
 impl EthHdr {
-    pub fn parse(data: &[u8]) -> LldpdResult<(EthHdr, usize)> {
+    pub fn parse(data: &[u8]) -> Result<(EthHdr, usize)> {
         if data.len() < ETHER_LEN as usize {
-            return Err(parse_error("ethernet header too short"));
+            return Err(anyhow!("ethernet header too short"));
         }
         let mut eth_hdr = EthHdr {
             eth_dmac: MacAddr::from_slice(&data[0..6]),
@@ -106,7 +106,7 @@ impl EthHdr {
         if eth_hdr.eth_type == ETHER_VLAN {
             eth_hdr.eth_size = 4;
             if data.len() < eth_hdr.eth_size as usize {
-                return Err(parse_error("vlan header too short"));
+                return Err(anyhow!("vlan header too short"));
             }
             let word = get_u16(&data[14..])?;
             let eth_8021q = word.into();
@@ -133,13 +133,13 @@ pub struct LldpHdr {
 }
 
 impl LldpHdr {
-    fn parse(data: &[u8]) -> LldpdResult<(LldpHdr, usize)> {
+    pub fn parse(data: &[u8]) -> Result<(LldpHdr, usize)> {
         let mut lldp_data = Vec::new();
         let mut offset = 0;
         let mut done = false;
         while !done {
             if offset >= data.len() {
-                return Err(parse_error("packet too short"));
+                return Err(anyhow!("packet too short"));
             }
             let (tlv, bytes) = LldpTlv::parse(&data[offset..])?;
             done = tlv.lldp_tlv_type == 0;
@@ -168,12 +168,12 @@ pub struct LldpTlv {
 }
 
 impl LldpTlv {
-    pub fn new(tlv_type: u8, tlv_data: &[u8]) -> LldpdResult<Self> {
+    pub fn new(tlv_type: u8, tlv_data: &[u8]) -> Result<Self> {
         let tlv_size = tlv_data.len();
         if tlv_type & 0x80 != 0 {
-            Err(invalid_error("Invalid tlv_type"))
+            Err(anyhow!("Invalid tlv_type"))
         } else if tlv_size > 511 {
-            Err(invalid_error("tlv_data exceeds 511 octets"))
+            Err(anyhow!("tlv_data exceeds 511 octets"))
         } else {
             Ok(LldpTlv {
                 lldp_tlv_type: tlv_type,
@@ -183,9 +183,9 @@ impl LldpTlv {
         }
     }
 
-    fn parse(data: &[u8]) -> LldpdResult<(LldpTlv, usize)> {
+    fn parse(data: &[u8]) -> Result<(LldpTlv, usize)> {
         if data.len() < 2 {
-            return Err(parse_error("lldp tlv prefix too short"));
+            return Err(anyhow!("lldp tlv prefix too short"));
         }
 
         let word = get_u16(data)?;
@@ -194,7 +194,7 @@ impl LldpTlv {
         let end = 2 + lldp_tlv_size as usize;
 
         if end > data.len() {
-            return Err(parse_error("lldp tlv too short"));
+            return Err(anyhow!("lldp tlv too short"));
         }
         Ok((
             LldpTlv {
@@ -212,9 +212,9 @@ impl LldpTlv {
     }
 }
 
-fn get_u16(data: &[u8]) -> LldpdResult<u16> {
+fn get_u16(data: &[u8]) -> Result<u16> {
     if data.len() < 2 {
-        Err(parse_error("buffer too small"))
+        Err(anyhow!("buffer too small"))
     } else {
         Ok((data[0] as u16) << 8 | data[1] as u16)
     }
@@ -222,14 +222,4 @@ fn get_u16(data: &[u8]) -> LldpdResult<u16> {
 
 fn get_bytes(data: u16) -> [u8; 2] {
     [(data >> 8 & 0xff) as u8, (data & 0xff) as u8]
-}
-
-/// Utility function to generate an Invalid error
-pub fn invalid_error(message: impl ToString) -> LldpdError {
-    LldpdError::Invalid(message.to_string())
-}
-
-/// Utility function to generate a Parse error
-pub fn parse_error(message: impl ToString) -> LldpdError {
-    LldpdError::Protocol(message.to_string())
 }

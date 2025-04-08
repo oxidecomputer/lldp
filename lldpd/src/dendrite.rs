@@ -10,11 +10,11 @@ use slog::info;
 use crate::Global;
 use crate::LldpdError;
 use crate::LldpdResult;
-use common::MacAddr;
 use dpd_client::types::LinkId;
 use dpd_client::types::PortId;
 use dpd_client::Client;
 use dpd_client::ClientState;
+use protocol::macaddr::MacAddr;
 
 fn parse_link_name(name: &str) -> LldpdResult<(PortId, LinkId)> {
     let Some((port_id, link_id)) = name.split_once('/') else {
@@ -45,8 +45,10 @@ pub async fn dpd_tfport(
         .await
         .map_err(|e| LldpdError::DpdClientError(e.to_string()))?;
     let iface = format!("tfport{port_id}_{link_id}");
-    let mac = link_info.into_inner().address;
-    Ok((iface, mac.into()))
+    let dpd_mac = link_info.into_inner().address;
+    let mac = dpd_mac.a.into();
+
+    Ok((iface, mac))
 }
 
 async fn dpd_version(log: &slog::Logger, client: &Client) -> String {

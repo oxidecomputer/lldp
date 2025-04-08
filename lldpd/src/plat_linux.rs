@@ -4,10 +4,10 @@
 
 // Copyright 2024 Oxide Computer Company
 
-use crate::types::LldpdResult;
 use crate::Global;
 use crate::LldpdError;
-use common::MacAddr;
+use crate::LldpdResult;
+use protocol::macaddr::MacAddr;
 use tokio::io::unix::AsyncFd;
 
 mod pcap {
