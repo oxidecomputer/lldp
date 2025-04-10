@@ -248,6 +248,7 @@ const IANA_802: u8 = 6;
     JsonSchema,
     Serialize,
 )]
+#[serde(rename_all = "snake_case")]
 pub enum NetworkAddress {
     //  IPv4 or IPv6
     IpAddr(IpAddr),
@@ -669,6 +670,7 @@ pub fn capabilities_from_tlv(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InterfaceNum {
     Unknown(u32),
     IfIndex(u32),
