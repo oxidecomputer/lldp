@@ -229,6 +229,13 @@ fn hex2str(data: &[u8]) -> String {
     }
 }
 
+// IANA Address Family Numbers for the address types we currently support as
+// seen in:
+// https://www.iana.org/assignments/address-family-numbers/address-family-numbers.xhtml
+const IANA_IPV4: u8 = 1;
+const IANA_IPV6: u8 = 2;
+const IANA_802: u8 = 6;
+
 #[derive(
     Clone,
     Debug,
@@ -242,7 +249,11 @@ fn hex2str(data: &[u8]) -> String {
     Serialize,
 )]
 pub enum NetworkAddress {
+    //  IPv4 or IPv6
     IpAddr(IpAddr),
+    // 802 (includes all 802 media plus Ethernet "canonical format")".
+    // This suggests that we need to be prepared for any 802 address, not just
+    // MAC addresses.
     IEEE802(Vec<u8>),
 }
 
@@ -310,10 +321,6 @@ impl fmt::Display for ChassisId {
         }
     }
 }
-
-const IANA_IPV4: u8 = 1;
-const IANA_IPV6: u8 = 2;
-const IANA_802: u8 = 6;
 
 // An address is represented as a string of octets, where the first two contain
 // the IANA registered number for the address type, and the remaining octects
