@@ -1918,6 +1918,7 @@ dependencies = [
  "common 0.1.0",
  "futures",
  "progenitor",
+ "protocol",
  "reqwest",
  "schemars",
  "serde",
