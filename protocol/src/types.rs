@@ -218,6 +218,57 @@ fn tlv_sanity_check(tlv: &LldpTlv, expected_type: TlvType) -> Result<()> {
     }
 }
 
+fn hex2str(data: &[u8]) -> String {
+    if data.is_empty() {
+        "null".to_string()
+    } else {
+        data.iter()
+            .map(|a| format!("{a:02x}"))
+            .collect::<Vec<String>>()
+            .join(":")
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Deserialize,
+    JsonSchema,
+    Serialize,
+)]
+pub enum NetworkAddress {
+    IpAddr(IpAddr),
+    IEEE802(Vec<u8>),
+}
+
+impl From<IpAddr> for NetworkAddress {
+    fn from(addr: IpAddr) -> Self {
+        NetworkAddress::IpAddr(addr)
+    }
+}
+
+impl From<Vec<u8>> for NetworkAddress {
+    fn from(addr: Vec<u8>) -> Self {
+        NetworkAddress::IEEE802(addr)
+    }
+}
+
+impl fmt::Display for NetworkAddress {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NetworkAddress::IpAddr(ip) => write!(f, "IpAddr({ip})"),
+            NetworkAddress::IEEE802(addr) => {
+                write!(f, "IEEE802({})", hex2str(addr))
+            }
+        }
+    }
+}
+
 #[derive(
     Clone,
     Debug,
@@ -235,7 +286,7 @@ pub enum ChassisId {
     InterfaceAlias(String),   // RFC 2863
     PortComponent(String),    // RFC 6993
     MacAddress(MacAddr),
-    NetworkAddress(IpAddr),
+    NetworkAddress(NetworkAddress),
     InterfaceName(String), // RFC 2863
     LocallyAssigned(String),
 }
@@ -262,25 +313,33 @@ impl fmt::Display for ChassisId {
 
 const IANA_IPV4: u8 = 1;
 const IANA_IPV6: u8 = 2;
+const IANA_802: u8 = 6;
+
 // An address is represented as a string of octets, where the first two contain
 // the IANA registered number for the address type, and the remaining octects
 // contain address itself.
-fn addr_to_octets(ip: IpAddr) -> Vec<u8> {
+fn addr_to_octets(addr: &NetworkAddress) -> Vec<u8> {
     let mut v = vec![];
-    match ip {
-        IpAddr::V4(ip) => {
-            v.push(IANA_IPV4);
-            v.extend(ip.octets())
-        }
-        IpAddr::V6(ip) => {
-            v.push(IANA_IPV6);
-            v.extend(ip.octets())
+    match addr {
+        NetworkAddress::IpAddr(ip) => match ip {
+            IpAddr::V4(ip) => {
+                v.push(IANA_IPV4);
+                v.extend(ip.octets())
+            }
+            IpAddr::V6(ip) => {
+                v.push(IANA_IPV6);
+                v.extend(ip.octets())
+            }
+        },
+        NetworkAddress::IEEE802(addr) => {
+            v.push(IANA_802);
+            v.extend(addr)
         }
     }
     v
 }
 
-fn addr_from_octets(data: &[u8]) -> Result<IpAddr> {
+fn addr_from_octets(data: &[u8]) -> Result<NetworkAddress> {
     let len = data.len();
     if len == 0 {
         return Err(anyhow!("address TLV has no payload"));
@@ -291,7 +350,7 @@ fn addr_from_octets(data: &[u8]) -> Result<IpAddr> {
                 let a: [u8; 4] = (&data[1..])
                     .try_into()
                     .expect("size validated by the match");
-                Ok(IpAddr::from(a))
+                Ok(NetworkAddress::IpAddr(IpAddr::from(a)))
             }
             _ => Err(anyhow!("invalid sized IPv4 address in TLV")),
         },
@@ -300,11 +359,14 @@ fn addr_from_octets(data: &[u8]) -> Result<IpAddr> {
                 let a: [u8; 16] = (&data[1..])
                     .try_into()
                     .expect("size validated by the match");
-                Ok(IpAddr::from(a))
+                Ok(NetworkAddress::IpAddr(IpAddr::from(a)))
             }
             _ => Err(anyhow!("invalid sized IPv6 address in TLV")),
         },
-        x => Err(anyhow!(format!("unsupported address type {x} in TLV"))),
+        IANA_802 => Ok(NetworkAddress::IEEE802(data[1..].to_vec())),
+        x => Err(anyhow!(format!(
+            "unsupported address type {x} in TLV - len {len}"
+        ))),
     }
 }
 
@@ -327,9 +389,9 @@ impl TryFrom<&ChassisId> for LldpTlv {
             ChassisId::MacAddress(mac) => {
                 (ChassisIdSubtype::MacAddress, mac.to_vec())
             }
-            ChassisId::NetworkAddress(ip) => (
+            ChassisId::NetworkAddress(addr) => (
                 ChassisIdSubtype::NetworkAddress,
-                addr_to_octets(*ip).to_vec(),
+                addr_to_octets(addr).to_vec(),
             ),
             ChassisId::InterfaceName(tlvdata) => {
                 (ChassisIdSubtype::InterfaceName, tlvdata.as_bytes().to_vec())
@@ -418,7 +480,7 @@ pub enum PortId {
     InterfaceAlias(String), // RFC 2863
     PortComponent(String),  //  RFC 6933
     MacAddress(MacAddr),
-    NetworkAddress(IpAddr),
+    NetworkAddress(NetworkAddress),
     InterfaceName(String),  // RFC 2863
     AgentCircuitId(String), // RFC 3046
     LocallyAssigned(String),
@@ -455,8 +517,8 @@ impl TryFrom<&PortId> for LldpTlv {
             PortId::MacAddress(mac) => {
                 (PortIdSubtype::MacAddress, mac.to_vec())
             }
-            PortId::NetworkAddress(ip) => {
-                (PortIdSubtype::NetworkAddress, addr_to_octets(*ip).to_vec())
+            PortId::NetworkAddress(addr) => {
+                (PortIdSubtype::NetworkAddress, addr_to_octets(addr).to_vec())
             }
             PortId::InterfaceName(tlvdata) => {
                 (PortIdSubtype::InterfaceName, tlvdata.as_bytes().to_vec())
@@ -645,19 +707,23 @@ impl From<InterfaceNumSubtype> for u8 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema, Serialize)]
 pub struct ManagementAddress {
-    pub addr: IpAddr,
+    pub addr: NetworkAddress,
     pub interface_num: InterfaceNum,
-    pub oid: Option<String>,
+    pub oid: Option<Vec<u8>>,
 }
 
 impl fmt::Display for ManagementAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.oid {
-            Some(oid) => write!(
-                f,
-                "{} ({}) (OID: {})",
-                self.addr, self.interface_num, oid
-            ),
+            Some(oid) => {
+                write!(
+                    f,
+                    "{} {} (OID: {})",
+                    self.addr,
+                    self.interface_num,
+                    hex2str(oid)
+                )
+            }
             None => write!(f, "{} ({})", self.addr, self.interface_num),
         }
     }
@@ -668,14 +734,14 @@ impl TryFrom<&ManagementAddress> for LldpTlv {
 
     fn try_from(from: &ManagementAddress) -> Result<Self> {
         let (oid, oid_len) = match &from.oid {
-            Some(oid) => (Some(oid.as_bytes().to_vec()), oid.len()),
+            Some(oid) => (Some(oid.clone()), oid.len()),
             None => (None, 0),
         };
 
         if oid_len > 128 {
             return Err(anyhow!("OID must be no more than 128 bytes long",));
         }
-        let mut addr = addr_to_octets(from.addr);
+        let mut addr = addr_to_octets(&from.addr);
 
         let (iface_num_subtype, iface_num) = match from.interface_num {
             InterfaceNum::Unknown(num) => (InterfaceNumSubtype::Unknown, num),
@@ -740,7 +806,7 @@ impl TryFrom<&LldpTlv> for ManagementAddress {
 
         let oid = match oid_len {
             0 => None,
-            _ => Some(string_from_octets("OID", &d[oid_start..])?),
+            _ => Some(d[oid_start..].to_vec()),
         };
 
         Ok(ManagementAddress {
@@ -837,7 +903,10 @@ pub fn string_to_tlv(tlv_type: TlvType, data: &String) -> Result<LldpTlv> {
 }
 
 #[allow(dead_code)]
-pub fn addr_to_tlv(tlv_type: TlvType, addr: IpAddr) -> Result<LldpTlv> {
+pub fn addr_to_tlv(
+    tlv_type: TlvType,
+    addr: &NetworkAddress,
+) -> Result<LldpTlv> {
     let lldp_tlv_type = tlv_type.into();
     let lldp_tlv_octets = addr_to_octets(addr);
     let lldp_tlv_size = lldp_tlv_octets.len() as u16;
