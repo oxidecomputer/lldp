@@ -237,7 +237,7 @@ pub fn build_lldpdu(
         .unwrap_or(&switchinfo.management_addrs)
         .iter()
         .map(|addr| protocol::types::ManagementAddress {
-            addr: *addr,
+            addr: (*addr).into(),
             // TODO-completeness: include an interface number with each
             // management address.
             interface_num: protocol::types::InterfaceNum::Unknown(0),

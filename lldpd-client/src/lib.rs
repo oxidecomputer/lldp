@@ -29,6 +29,10 @@ progenitor::generate_api!(
         slog::trace!(log, "client response"; "result" => ?result);
     }),
     derives = [PartialEq],
+ replace = {
+        ManagementAddress = protocol::types::ManagementAddress,
+        NetworkAddress = protocol::types::NetworkAddress,
+    }
 );
 
 impl fmt::Display for types::MacAddr {

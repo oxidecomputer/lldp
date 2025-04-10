@@ -1187,8 +1187,7 @@
             "type": "object",
             "properties": {
               "NetworkAddress": {
-                "type": "string",
-                "format": "ip"
+                "$ref": "#/components/schemas/NetworkAddress"
               }
             },
             "required": [
@@ -1368,8 +1367,7 @@
         "type": "object",
         "properties": {
           "addr": {
-            "type": "string",
-            "format": "ip"
+            "$ref": "#/components/schemas/NetworkAddress"
           },
           "interface_num": {
             "$ref": "#/components/schemas/InterfaceNum"
@@ -1451,6 +1449,40 @@
           "items"
         ]
       },
+      "NetworkAddress": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "IpAddr": {
+                "type": "string",
+                "format": "ip"
+              }
+            },
+            "required": [
+              "IpAddr"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "IEEE802": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0
+                }
+              }
+            },
+            "required": [
+              "IEEE802"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "PortId": {
         "oneOf": [
           {
@@ -1493,8 +1525,7 @@
             "type": "object",
             "properties": {
               "NetworkAddress": {
-                "type": "string",
-                "format": "ip"
+                "$ref": "#/components/schemas/NetworkAddress"
               }
             },
             "required": [
