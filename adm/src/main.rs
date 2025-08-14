@@ -473,12 +473,12 @@ async fn main() -> anyhow::Result<()> {
                 .interface_get(&iface)
                 .await
                 .map(|r| display_interface(&r.into_inner()))
-                .context("failed to remove interface"),
+                .context("failed to get interface"),
             Interface::List => client
                 .interface_list()
                 .await
                 .map(|r| r.into_inner().iter().for_each(display_interface))
-                .context("failed to remove interface"),
+                .context("failed to get interface list"),
             Interface::Disable { iface } => client
                 .interface_set_disabled(&iface, true)
                 .await
