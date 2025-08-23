@@ -6,8 +6,8 @@ description = "Client library for the Oxide LLDP daemon"
 
 [dependencies]
 chrono.workspace = true
-common.workspace = true
 futures.workspace = true
+lldpd-common.workspace = true
 protocol.workspace = true
 progenitor.workspace = true
 reqwest.workspace = true

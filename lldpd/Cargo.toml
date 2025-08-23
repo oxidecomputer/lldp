@@ -11,11 +11,11 @@ smf = [ "dep:smf-rs" ]
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-common.workspace = true
-protocol.workspace = true
 dpd-client.workspace = true
 dropshot.workspace = true
 http.workspace = true
+lldpd-common.workspace = true
+protocol.workspace = true
 signal-hook.workspace = true
 serde.workspace = true
 schemars.workspace = true
