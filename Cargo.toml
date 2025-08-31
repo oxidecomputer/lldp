@@ -25,7 +25,7 @@ dpd-client = { git = "https://github.com/oxidecomputer/dendrite"}
 anyhow = "1.0"
 camino = { version = "1.1", features = ["serde1"] }
 chrono = "0.4"
-dropshot = "0.10.0"
+dropshot = "0.16.3"
 futures = "0.3"
 http = "0.2.9"
 omicron-zone-package = "0.11.1"

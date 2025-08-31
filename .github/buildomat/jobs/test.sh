@@ -20,9 +20,5 @@ do
 	cargo clippy --features $feat -- --deny warnings
 done
 
-# This file is generated dynamically during the build, and its absence here
-# makes rustfmt sad.
-echo '#![rustfmt::skip]' > lldpd/src/ffi.rs
-
 banner "fmt"
 cargo fmt -- --check
