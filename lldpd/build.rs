@@ -6,6 +6,8 @@
 
 #[cfg(target_os = "linux")]
 fn gen_bindings() -> std::io::Result<()> {
+    use std::path::PathBuf;
+
     let functions = vec![
         "pcap_open_offline",
         "pcap_create",
@@ -30,9 +32,10 @@ fn gen_bindings() -> std::io::Result<()> {
         b = b.allowlist_function(f);
     }
 
-    b = b.raw_line("#![allow(nonstandard_style)]");
-    b = b.raw_line("#![allow(dead_code)]");
-    b.generate().unwrap().write_to_file("./src/ffi.rs")
+    let mut out_path =
+        PathBuf::from(std::env::var("OUT_DIR").expect("Cargo sets OUT_DIR"));
+    out_path.push("ffi.rs");
+    b.generate().unwrap().write_to_file(&out_path)
 }
 
 fn main() -> anyhow::Result<()> {
