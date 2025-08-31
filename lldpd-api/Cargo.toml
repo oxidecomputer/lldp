@@ -1,0 +1,12 @@
+[package]
+name = "lldpd-api"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+[dependencies]
+dropshot.workspace = true
+lldpd-types.workspace = true
+protocol.workspace = true
+schemars.workspace = true
+serde.workspace = true

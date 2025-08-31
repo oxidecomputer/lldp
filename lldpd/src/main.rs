@@ -32,7 +32,12 @@ mod dendrite;
 mod smf;
 
 #[cfg(target_os = "linux")]
-mod ffi;
+mod ffi {
+    #![allow(nonstandard_style)]
+    #![allow(dead_code)]
+
+    include!(concat!(env!("OUT_DIR"), "/ffi.rs"));
+}
 #[cfg(target_os = "illumos")]
 mod plat_illumos;
 #[cfg(target_os = "linux")]
@@ -242,8 +247,9 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
 }
 
 fn print_openapi() -> LldpdResult<()> {
-    crate::api_server::http_api()
-        .openapi("Oxide LLDP Daemon", "0.0.1")
+    lldpd_api::lldpd_api_mod::stub_api_description()
+        .unwrap()
+        .openapi("Oxide LLDP Daemon", "0.0.1".parse().unwrap())
         .description("API for managing the LLDP daemon")
         .contact_url("https://oxide.computer")
         .contact_email("api@oxide.computer")
