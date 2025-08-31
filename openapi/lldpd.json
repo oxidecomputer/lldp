@@ -1303,42 +1303,42 @@
           {
             "type": "object",
             "properties": {
-              "Unknown": {
+              "unknown": {
                 "type": "integer",
                 "format": "uint32",
                 "minimum": 0
               }
             },
             "required": [
-              "Unknown"
+              "unknown"
             ],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
-              "IfIndex": {
+              "if_index": {
                 "type": "integer",
                 "format": "uint32",
                 "minimum": 0
               }
             },
             "required": [
-              "IfIndex"
+              "if_index"
             ],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
-              "PortNumber": {
+              "port_number": {
                 "type": "integer",
                 "format": "uint32",
                 "minimum": 0
               }
             },
             "required": [
-              "PortNumber"
+              "port_number"
             ],
             "additionalProperties": false
           }
@@ -1374,7 +1374,12 @@
           },
           "oid": {
             "nullable": true,
-            "type": "string"
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0
+            }
           }
         },
         "required": [
@@ -1454,20 +1459,20 @@
           {
             "type": "object",
             "properties": {
-              "IpAddr": {
+              "ip_addr": {
                 "type": "string",
                 "format": "ip"
               }
             },
             "required": [
-              "IpAddr"
+              "ip_addr"
             ],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
-              "IEEE802": {
+              "i_e_e_e802": {
                 "type": "array",
                 "items": {
                   "type": "integer",
@@ -1477,7 +1482,7 @@
               }
             },
             "required": [
-              "IEEE802"
+              "i_e_e_e802"
             ],
             "additionalProperties": false
           }

@@ -6,6 +6,8 @@
 
 use std::convert;
 
+use dropshot::ClientErrorStatusCode;
+
 #[derive(Debug, thiserror::Error)]
 pub enum LldpdError {
     /// The daemon attempted to perform a task the required contacting dpd without
@@ -68,14 +70,18 @@ impl convert::From<LldpdError> for dropshot::HttpError {
             LldpdError::Io(e) => {
                 dropshot::HttpError::for_internal_error(e.to_string())
             }
-            LldpdError::Exists(e) => dropshot::HttpError::for_status(
-                Some(e),
-                http::StatusCode::CONFLICT,
-            ),
-            LldpdError::Missing(e) => dropshot::HttpError::for_status(
-                Some(e),
-                http::StatusCode::NOT_FOUND,
-            ),
+            LldpdError::Exists(e) => {
+                dropshot::HttpError::for_client_error_with_status(
+                    Some(e),
+                    ClientErrorStatusCode::CONFLICT,
+                )
+            }
+            LldpdError::Missing(e) => {
+                dropshot::HttpError::for_client_error_with_status(
+                    Some(e),
+                    ClientErrorStatusCode::NOT_FOUND,
+                )
+            }
             LldpdError::Invalid(e) => {
                 dropshot::HttpError::for_bad_request(None, e)
             }
