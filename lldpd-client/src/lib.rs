@@ -10,7 +10,7 @@ use std::fmt;
 
 /// Return the default port on which the `lldpd` API server listens for clients.
 pub const fn default_port() -> u16 {
-    ::common::DEFAULT_LLDPD_PORT
+    ::lldpd_common::DEFAULT_LLDPD_PORT
 }
 
 // Automatically generate the client bindings using Progenitor.
