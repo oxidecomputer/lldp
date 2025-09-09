@@ -12,9 +12,6 @@ use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use chrono::DateTime;
-use chrono::Utc;
-use dropshot::endpoint;
 use dropshot::EmptyScanParams;
 use dropshot::HttpError;
 use dropshot::HttpResponseCreated;
@@ -28,68 +25,47 @@ use dropshot::RequestContext;
 use dropshot::ResultsPage;
 use dropshot::TypedBody;
 use dropshot::WhichPage;
-use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
+use lldpd_api::*;
+use lldpd_types::build_info::BuildInfo;
+use lldpd_types::interfaces::Interface;
+use lldpd_types::interfaces::InterfaceAdd;
+use lldpd_types::neighbor::Neighbor;
+use lldpd_types::neighbor::NeighborId;
 use slog::debug;
 use slog::error;
 use slog::info;
 use slog::o;
 
 use crate::interfaces;
-use crate::types;
 use crate::Global;
 use crate::LldpdError;
 use protocol::types as protocol;
 
 type ApiServer = dropshot::HttpServer<Arc<Global>>;
 
-/// Detailed build information about `lldpd`.
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-pub struct BuildInfo {
-    pub version: String,
-    pub git_sha: String,
-    pub git_commit_timestamp: String,
-    pub git_branch: String,
-    pub rustc_semver: String,
-    pub rustc_channel: String,
-    pub rustc_host_triple: String,
-    pub rustc_commit_sha: String,
-    pub cargo_triple: String,
-    pub debug: bool,
-    pub opt_level: u8,
-}
-
-impl Default for BuildInfo {
-    fn default() -> Self {
-        Self {
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            git_sha: env!("VERGEN_GIT_SHA").to_string(),
-            git_commit_timestamp: env!("VERGEN_GIT_COMMIT_TIMESTAMP")
-                .to_string(),
-            git_branch: env!("VERGEN_GIT_BRANCH").to_string(),
-            rustc_semver: env!("VERGEN_RUSTC_SEMVER").to_string(),
-            rustc_channel: env!("VERGEN_RUSTC_CHANNEL").to_string(),
-            rustc_host_triple: env!("VERGEN_RUSTC_HOST_TRIPLE").to_string(),
-            rustc_commit_sha: env!("VERGEN_RUSTC_COMMIT_HASH").to_string(),
-            cargo_triple: env!("VERGEN_CARGO_TARGET_TRIPLE").to_string(),
-            debug: env!("VERGEN_CARGO_DEBUG").parse().unwrap(),
-            opt_level: env!("VERGEN_CARGO_OPT_LEVEL").parse().unwrap(),
-        }
+fn build_info() -> BuildInfo {
+    BuildInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        git_sha: env!("VERGEN_GIT_SHA").to_string(),
+        git_commit_timestamp: env!("VERGEN_GIT_COMMIT_TIMESTAMP").to_string(),
+        git_branch: env!("VERGEN_GIT_BRANCH").to_string(),
+        rustc_semver: env!("VERGEN_RUSTC_SEMVER").to_string(),
+        rustc_channel: env!("VERGEN_RUSTC_CHANNEL").to_string(),
+        rustc_host_triple: env!("VERGEN_RUSTC_HOST_TRIPLE").to_string(),
+        rustc_commit_sha: env!("VERGEN_RUSTC_COMMIT_HASH").to_string(),
+        cargo_triple: env!("VERGEN_CARGO_TARGET_TRIPLE").to_string(),
+        debug: env!("VERGEN_CARGO_DEBUG").parse().unwrap(),
+        opt_level: env!("VERGEN_CARGO_OPT_LEVEL").parse().unwrap(),
     }
 }
 
-// Temporary module to provide an indent and avoid destroying blame.
-mod imp {
-    use super::*;
+pub enum LldpdApiImpl {}
 
-    /// Set the default chassis ID advertised on all ports
-    #[endpoint {
-    	method = POST,
-    	path = "/system/chassis_id",
-    }]
-    pub(super) async fn sys_set_chassis_id(
-        rqctx: RequestContext<Arc<Global>>,
+impl LldpdApi for LldpdApiImpl {
+    type Context = Arc<Global>;
+
+    async fn sys_set_chassis_id(
+        rqctx: RequestContext<Self::Context>,
         body: TypedBody<protocol::ChassisId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -98,13 +74,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Set the default system name advertised on all ports
-    #[endpoint {
-    	method = POST,
-    	path = "/system/system_name",
-    }]
-    pub(super) async fn sys_set_system_name(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_set_system_name(
+        rqctx: RequestContext<Self::Context>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -113,27 +84,16 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Delete default system name advertised on all ports.  A system name will
-    /// only be advertised on those interfaces with a locally set system name.
-    #[endpoint {
-        method = DELETE,
-        path = "/system/system_name",
-    }]
-    pub(super) async fn sys_del_system_name(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_del_system_name(
+        rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
         debug!(global.log, "delete system_name");
         Ok(HttpResponseDeleted())
     }
 
-    /// Set the default system description advertised on all interfaces
-    #[endpoint {
-    	method = POST,
-    	path = "/system/system_description",
-    }]
-    pub(super) async fn sys_set_system_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_set_system_description(
+        rqctx: RequestContext<Self::Context>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -142,32 +102,16 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Delete default system description advertised on all interfaces.  A system name will
-    /// only be advertised on those interfaces with a locally set system description.
-    #[endpoint {
-        method = DELETE,
-        path = "/system/system_description",
-    }]
-    pub(super) async fn sys_del_system_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_del_system_description(
+        rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
         debug!(global.log, "delete system_description");
         Ok(HttpResponseDeleted())
     }
 
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct SystemCapabilityPathParams {
-        capability: protocol::SystemCapabilities,
-    }
-
-    /// Add a capability to the set of those advertised on all interfaces
-    #[endpoint {
-    	method = POST,
-    	path = "/system/system_capability/{capability}",
-    }]
-    pub(super) async fn sys_add_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_add_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -176,13 +120,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Remove a capability from the set of those advertised on all interfaces
-    #[endpoint {
-    	method = DELETE,
-    	path = "/system/system_capability/{capability}",
-    }]
-    pub(super) async fn sys_del_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_del_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -191,13 +130,8 @@ mod imp {
         Ok(HttpResponseDeleted())
     }
 
-    /// Add a capability to the set of those advertised as enabled on all interfaces
-    #[endpoint {
-    	method = POST,
-    	path = "/system/enabled_capability/{capability}",
-    }]
-    pub(super) async fn sys_enable_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_enable_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -209,13 +143,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Remove a capability from the set of those advertised as enabled on all interfaces
-    #[endpoint {
-    	method = DELETE,
-    	path = "/system/enabled_capability/{capability}",
-    }]
-    pub(super) async fn sys_disable_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_disable_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -224,18 +153,8 @@ mod imp {
         Ok(HttpResponseDeleted())
     }
 
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct SystemAddressPathParams {
-        address: IpAddr,
-    }
-
-    /// Add a management address to the set of those advertised on all interfaces
-    #[endpoint {
-    	method = POST,
-    	path = "/system/management_address/{address}",
-    }]
-    pub(super) async fn sys_add_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_add_management_addr(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemAddressPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -244,13 +163,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    /// Remove a management address from the set of those advertised on all interfaces
-    #[endpoint {
-    	method = DELETE,
-    	path = "/system/management_address/{address}",
-    }]
-    pub(super) async fn sys_del_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_del_management_addr(
+        rqctx: RequestContext<Self::Context>,
         path: Path<SystemAddressPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -259,52 +173,16 @@ mod imp {
         Ok(HttpResponseDeleted())
     }
 
-    /// Remove all management addresses from the set of those advertised on all
-    /// interfaces
-    #[endpoint {
-    	method = DELETE,
-    	path = "/system/management_address",
-    }]
-    pub(super) async fn sys_clear_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn sys_clear_management_addr(
+        rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
         debug!(global.log, "clear all management addresses");
         Ok(HttpResponseDeleted())
     }
 
-    /// A local interface on which we are listening for, and dispatching, LLDPDUs
-    #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-    pub struct Interface {
-        pub port: String,
-        pub iface: String,
-        pub disabled: bool,
-        pub system_info: types::SystemInfo,
-    }
-
-    /// Optional arguments when adding an interface to LLDPD.  Any argument left
-    /// unspecified will be assigned the default values for this system.
-    #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-    pub struct InterfaceAdd {
-        pub chassis_id: Option<protocol::ChassisId>,
-        pub port_id: Option<protocol::PortId>,
-        pub system_name: Option<String>,
-        pub system_description: Option<String>,
-        pub port_description: Option<String>,
-    }
-
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct InterfacePathParams {
-        /// The switch port on which to operate.
-        iface: String,
-    }
-
-    #[endpoint {
-        method = PUT,
-        path = "/interface/{iface}",
-    }]
-    pub(super) async fn interface_add(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_add(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         params: TypedBody<InterfaceAdd>,
     ) -> Result<HttpResponseCreated<()>, HttpError> {
@@ -327,12 +205,8 @@ mod imp {
             .map_err(|e| e.into())
     }
 
-    #[endpoint {
-        method = DELETE,
-        path = "/interface/{iface}",
-    }]
-    pub(super) async fn interface_del(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Arc<Global> = rqctx.context();
@@ -343,12 +217,8 @@ mod imp {
             .map_err(|e| e.into())
     }
 
-    #[endpoint {
-        method = GET,
-        path = "/interface/{iface}",
-    }]
-    pub(super) async fn interface_get(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_get(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseOk<Interface>, HttpError> {
         let global: &Global = rqctx.context();
@@ -382,12 +252,8 @@ mod imp {
         ))
     }
 
-    #[endpoint {
-        method = GET,
-        path = "/interface",
-    }]
-    pub(super) async fn interface_list(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_list(
+        rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<Vec<Interface>>, HttpError> {
         let global: &Global = rqctx.context();
         let switchinfo = global.switchinfo.lock().unwrap().clone();
@@ -414,12 +280,8 @@ mod imp {
         ))
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/disabled",
-    }]
-    pub(super) async fn interface_set_disabled(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_disabled(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<bool>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -432,12 +294,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/chassis_id",
-    }]
-    pub(super) async fn interface_set_chassis_id(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_chassis_id(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<protocol::ChassisId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -450,12 +308,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-        method = DELETE,
-        path = "/interface/{iface}/chassis_id",
-    }]
-    pub(super) async fn interface_del_chassis_id(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_chassis_id(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -466,12 +320,8 @@ mod imp {
             .map(|_| HttpResponseDeleted())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/port_id",
-    }]
-    pub(super) async fn interface_set_port_id(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_port_id(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<protocol::PortId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -484,12 +334,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/port_description",
-    }]
-    pub(super) async fn interface_set_port_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_port_description(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -502,12 +348,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-        method = DELETE,
-        path = "/interface/{iface}/port_description",
-    }]
-    pub(super) async fn interface_del_port_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_port_description(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -518,12 +360,8 @@ mod imp {
             .map(|_| HttpResponseDeleted())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/system_name",
-    }]
-    pub(super) async fn interface_set_system_name(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_system_name(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -536,12 +374,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-        method = DELETE,
-        path = "/interface/{iface}/system_name",
-    }]
-    pub(super) async fn interface_del_system_name(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_system_name(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -552,12 +386,8 @@ mod imp {
             .map(|_| HttpResponseDeleted())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/system_description",
-    }]
-    pub(super) async fn interface_set_system_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_set_system_description(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
@@ -570,12 +400,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-        method = DELETE,
-        path = "/interface/{iface}/system_description",
-    }]
-    pub(super) async fn interface_del_system_description(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_system_description(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -586,19 +412,8 @@ mod imp {
             .map(|_| HttpResponseDeleted())
     }
 
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct InterfaceCapabilityPathParams {
-        /// The switch port on which to operate.
-        iface: String,
-        capability: protocol::SystemCapabilities,
-    }
-
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/system_capability/{capability}",
-    }]
-    pub(super) async fn interface_add_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_add_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -610,12 +425,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-    	method = DELETE,
-    	path = "/interface/{iface}/system_capability/{capability}",
-    }]
-    pub(super) async fn interface_del_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -627,12 +438,8 @@ mod imp {
         Ok(HttpResponseDeleted())
     }
 
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/enabled_capability/{capability}",
-    }]
-    pub(super) async fn interface_enable_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_enable_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -646,12 +453,8 @@ mod imp {
         Ok(HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-    	method = DELETE,
-    	path = "/interface/{iface}/enabled_capability/{capability}",
-    }]
-    pub(super) async fn interface_disable_system_capability(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_disable_system_capability(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -663,22 +466,8 @@ mod imp {
         Ok(HttpResponseDeleted())
     }
 
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct InterfaceAddressPathParams {
-        /// The switch port on which to operate.
-        iface: String,
-        /// Management Address to advertise on this port
-        // TODO-completeness: this should allow non-IP addresses to be specified (as
-        // per the standard) and should include an optional interface number.
-        address: IpAddr,
-    }
-
-    #[endpoint {
-    	method = POST,
-    	path = "/interface/{iface}/management_address/{address}",
-    }]
-    pub(super) async fn interface_add_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_add_management_addr(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceAddressPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
@@ -689,12 +478,8 @@ mod imp {
             .map(|_| HttpResponseUpdatedNoContent())
     }
 
-    #[endpoint {
-    	method = DELETE,
-    	path = "/interface/{iface}/management_address/{address}",
-    }]
-    pub(super) async fn interface_del_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_del_management_addr(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfaceAddressPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -705,12 +490,8 @@ mod imp {
             .map_err(HttpError::from)
     }
 
-    #[endpoint {
-    	method = DELETE,
-    	path = "/interface/{iface}/management_address",
-    }]
-    pub(super) async fn interface_clear_management_addr(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn interface_clear_management_addr(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError> {
         let global: &Global = rqctx.context();
@@ -721,41 +502,8 @@ mod imp {
             .map(|_| HttpResponseDeleted())
     }
 
-    /**
-     * Represents a cursor into a paginated request for the contents of the neighbor
-     * list.
-     */
-    #[derive(Deserialize, Serialize, JsonSchema)]
-    struct NeighborToken {
-        id: types::NeighborId,
-    }
-
-    /// A remote system that has been discovered on one of our configured interfaces
-    #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-    pub struct Neighbor {
-        /// The port on which the neighbor was seen
-        pub port: String,
-        /// An ID that uniquely identifies the neighbor.  Note: this ID is assigned
-        /// when we first see a neighbor we are currently tracking.  If a neighbor
-        /// goes offline long enough to be forgotten, it will be assigned a new ID
-        /// if and when it comes back online.
-        pub id: uuid::Uuid,
-        /// When was the first beacon received from this neighbor.
-        pub first_seen: DateTime<Utc>,
-        /// When was the latest beacon received from this neighbor.
-        pub last_seen: DateTime<Utc>,
-        /// When was the last time this neighbor's beaconed LLDPDU contents changed.
-        pub last_changed: DateTime<Utc>,
-        /// Contents of the neighbor's LLDPDU beacon.
-        pub system_info: types::SystemInfo,
-    }
-    /// Return a list of the active neighbors
-    #[endpoint {
-        method = GET,
-        path = "/interface/{iface}/neighbors",
-    }]
-    pub(super) async fn get_neighbors(
-        rqctx: RequestContext<Arc<Global>>,
+    async fn get_neighbors(
+        rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         query: Query<PaginationParams<EmptyScanParams, NeighborToken>>,
     ) -> Result<HttpResponseOk<ResultsPage<Neighbor>>, HttpError> {
@@ -789,7 +537,7 @@ mod imp {
 
         ResultsPage::new(neighbors, &EmptyScanParams {}, |n: &Neighbor, _| {
             NeighborToken {
-                id: types::NeighborId {
+                id: NeighborId {
                     chassis_id: n.system_info.chassis_id.clone(),
                     port_id: n.system_info.port_id.clone(),
                 },
@@ -798,15 +546,10 @@ mod imp {
         .map(HttpResponseOk)
     }
 
-    /// Return detailed build information about the `dpd` server itself.
-    #[endpoint {
-        method = GET,
-        path = "/build-info",
-    }]
-    pub(super) async fn build_info(
-        _rqctx: RequestContext<Arc<Global>>,
+    async fn build_info(
+        _rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<BuildInfo>, HttpError> {
-        Ok(HttpResponseOk(BuildInfo::default()))
+        Ok(HttpResponseOk(build_info()))
     }
 }
 
@@ -909,16 +652,15 @@ pub async fn api_server_manager(
     }
 }
 
-pub use imp::*;
-
 #[cfg(test)]
 mod tests {
-    use super::BuildInfo;
+    use crate::api_server::build_info;
+
     use std::process::Command;
 
     #[test]
     fn test_build_info() {
-        let info = BuildInfo::default();
+        let info = build_info();
         println!("{info:#?}");
         let out = Command::new("git")
             .arg("rev-parse")
@@ -932,47 +674,5 @@ mod tests {
 }
 
 pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
-    let mut api = dropshot::ApiDescription::new();
-
-    api.register(build_info).unwrap();
-    api.register(sys_set_chassis_id).unwrap();
-    api.register(sys_set_system_name).unwrap();
-    api.register(sys_del_system_name).unwrap();
-    api.register(sys_set_system_description).unwrap();
-    api.register(sys_del_system_description).unwrap();
-    api.register(sys_add_system_capability).unwrap();
-    api.register(sys_del_system_capability).unwrap();
-    api.register(sys_enable_system_capability).unwrap();
-    api.register(sys_disable_system_capability).unwrap();
-    api.register(sys_add_management_addr).unwrap();
-    api.register(sys_del_management_addr).unwrap();
-    api.register(sys_clear_management_addr).unwrap();
-    //api.register(sys_add_org_specific).unwrap();
-    //api.register(sys_del_org_specific).unwrap();
-    api.register(interface_add).unwrap();
-    api.register(interface_del).unwrap();
-    api.register(interface_list).unwrap();
-    api.register(interface_get).unwrap();
-    api.register(interface_set_disabled).unwrap();
-    api.register(interface_set_chassis_id).unwrap();
-    api.register(interface_del_chassis_id).unwrap();
-    api.register(interface_set_port_id).unwrap();
-    api.register(interface_set_port_description).unwrap();
-    api.register(interface_del_port_description).unwrap();
-    api.register(interface_set_system_name).unwrap();
-    api.register(interface_del_system_name).unwrap();
-    api.register(interface_set_system_description).unwrap();
-    api.register(interface_del_system_description).unwrap();
-    api.register(interface_add_system_capability).unwrap();
-    api.register(interface_del_system_capability).unwrap();
-    api.register(interface_enable_system_capability).unwrap();
-    api.register(interface_disable_system_capability).unwrap();
-    api.register(interface_add_management_addr).unwrap();
-    api.register(interface_del_management_addr).unwrap();
-    api.register(interface_clear_management_addr).unwrap();
-    //api.register(interface_add_org_specific).unwrap();
-    //api.register(interface_del_org_specific).unwrap();
-    api.register(get_neighbors).unwrap();
-
-    api
+    lldpd_api_mod::api_description::<LldpdApiImpl>().unwrap()
 }

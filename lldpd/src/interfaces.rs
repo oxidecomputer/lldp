@@ -16,6 +16,8 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 use chrono::Utc;
+use lldpd_types::neighbor::NeighborId;
+use lldpd_types::system_info::SystemInfo;
 use slog::debug;
 use slog::error;
 use slog::info;
@@ -69,7 +71,7 @@ pub struct Interface {
     pub stats: Stats,
 
     /// Neighbors we are currently aware of
-    pub neighbors: BTreeMap<types::NeighborId, types::Neighbor>,
+    pub neighbors: BTreeMap<NeighborId, types::Neighbor>,
 
     pub msg_tx: mpsc::Sender<InterfaceMsg>,
 
@@ -360,12 +362,12 @@ fn handle_packet(
         return;
     }
 
-    let id = types::NeighborId::new(&lldpdu);
+    let id = NeighborId::new(&lldpdu);
     // Is this is new neighbor, an update from an old neighbor, or just a
     // periodic re-advertisement of the same old stuff?
     match iface.neighbors.entry(id.clone()) {
         Entry::Vacant(e) => {
-            let sysinfo: types::SystemInfo = (&lldpdu).into();
+            let sysinfo: SystemInfo = (&lldpdu).into();
             let neighbor = types::Neighbor::from_lldpdu(&lldpdu, None);
             info!(iface.log, "new neighbor {:?}: {}", id, &sysinfo);
             e.insert(neighbor);
@@ -381,7 +383,7 @@ fn handle_packet(
             old.last_seen = now;
             old.expires_at = now + ttl;
             if old.lldpdu != lldpdu {
-                let sysinfo: types::SystemInfo = (&lldpdu).into();
+                let sysinfo: SystemInfo = (&lldpdu).into();
                 old.last_changed = now;
                 old.lldpdu = lldpdu;
                 info!(iface.log, "updated neighbor {:?}: {}", id, &sysinfo);
@@ -503,7 +505,7 @@ async fn wait_for_event(
 fn process_ttl_expirations(iface_lock: &Mutex<Interface>) {
     let now = Utc::now();
     let mut iface = iface_lock.lock().unwrap();
-    let expired: Vec<types::NeighborId> = iface
+    let expired: Vec<NeighborId> = iface
         .neighbors
         .iter()
         .filter(|(_id, n)| {
@@ -987,7 +989,7 @@ pub async fn addr_delete_all(g: &Global, name: &String) -> LldpdResult<()> {
 pub async fn get_neighbors(
     g: &Global,
     iface_name: &str,
-    prev: Option<types::NeighborId>,
+    prev: Option<NeighborId>,
     max: u32,
 ) -> LldpdResult<Vec<types::Neighbor>> {
     let iface_lock = get_interface(g, iface_name)?;

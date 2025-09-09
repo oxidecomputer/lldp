@@ -1779,7 +1779,9 @@ dependencies = [
  "dpd-client",
  "dropshot",
  "http 0.2.12",
+ "lldpd-api",
  "lldpd-common",
+ "lldpd-types",
  "protocol 0.1.0",
  "schemars",
  "serde",
@@ -1791,6 +1793,17 @@ dependencies = [
  "tokio",
  "uuid",
  "vergen",
+]
+
+[[package]]
+name = "lldpd-api"
+version = "0.1.0"
+dependencies = [
+ "dropshot",
+ "lldpd-types",
+ "protocol 0.1.0",
+ "schemars",
+ "serde",
 ]
 
 [[package]]
@@ -1824,6 +1837,17 @@ dependencies = [
  "slog-bunyan",
  "slog-term",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "lldpd-types"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "protocol 0.1.0",
+ "schemars",
+ "serde",
+ "uuid",
 ]
 
 [[package]]

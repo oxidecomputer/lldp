@@ -2,8 +2,10 @@
 
 members = [
 	"adm",
-	"lldpd-common",
+	"lldpd-api",
 	"lldpd-client",
+	"lldpd-common",
+	"lldpd-types",
 	"lldpd",
 	"protocol",
 	"xtask",
@@ -14,8 +16,10 @@ resolver = "2"
 [workspace.dependencies]
 
 # intra-package dependencies
+lldpd-api = { path = "lldpd-api" }
 lldpd-client = { path = "lldpd-client" }
 lldpd-common = { path = "lldpd-common" }
+lldpd-types = { path = "lldpd-types" }
 protocol = { path = "protocol" }
 
 # oxide dependencies from github
