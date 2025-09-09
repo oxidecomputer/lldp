@@ -864,11 +864,12 @@ pub async fn api_server_manager(
         // We always listen on localhost
         config_addrs.push(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            common::DEFAULT_LLDPD_PORT,
+            lldpd_common::DEFAULT_LLDPD_PORT,
         ));
         // Get the list of all the addresses we should be listening on,
         // and compare it to the list we currently are listening on.
-        let (add, remove) = common::purge_common(&config_addrs, &active_addrs);
+        let (add, remove) =
+            lldpd_common::purge_common(&config_addrs, &active_addrs);
 
         for addr in remove {
             let hdl = active.remove(&addr).unwrap();

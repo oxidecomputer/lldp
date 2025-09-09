@@ -2,7 +2,7 @@
 
 members = [
 	"adm",
-	"common",
+	"lldpd-common",
 	"lldpd-client",
 	"lldpd",
 	"protocol",
@@ -15,11 +15,11 @@ resolver = "2"
 
 # intra-package dependencies
 lldpd-client = { path = "lldpd-client" }
+lldpd-common = { path = "lldpd-common" }
 protocol = { path = "protocol" }
-common = { path = "common" }
 
 # oxide dependencies from github
-dpd-client = { git = "https://github.com/oxidecomputer/dendrite"}
+dpd-client = { git = "https://github.com/oxidecomputer/dendrite", branch = "main" }
 
 # public dependencies from crates.io
 anyhow = "1.0"
