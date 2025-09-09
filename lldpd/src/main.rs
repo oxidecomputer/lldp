@@ -32,7 +32,12 @@ mod dendrite;
 mod smf;
 
 #[cfg(target_os = "linux")]
-mod ffi;
+mod ffi {
+    #![allow(nonstandard_style)]
+    #![allow(dead_code)]
+
+    include!(concat!(env!("OUT_DIR"), "/ffi.rs"));
+}
 #[cfg(target_os = "illumos")]
 mod plat_illumos;
 #[cfg(target_os = "linux")]
