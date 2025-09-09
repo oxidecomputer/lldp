@@ -108,7 +108,7 @@ pub(crate) struct Opt {
         about = "log format",
         help = "format logs for 'human' or 'json' consumption"
     )]
-    log_format: common::LogFormat,
+    log_format: lldpd_common::LogFormat,
 
     #[structopt(long, help = "run without dpd")]
     #[cfg(feature = "dendrite")]
@@ -204,7 +204,7 @@ fn get_switchinfo(opts: &Opt) -> SwitchInfo {
 }
 
 async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
-    let log = common::log_init("lldpd", &opts.log_file, opts.log_format)?;
+    let log = lldpd_common::log_init("lldpd", &opts.log_file, opts.log_format)?;
 
     let switchinfo = get_switchinfo(&opts);
     println!("switchinfo: {switchinfo:#?}");
