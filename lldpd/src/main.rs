@@ -248,7 +248,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
 
 fn print_openapi() -> LldpdResult<()> {
     crate::api_server::http_api()
-        .openapi("Oxide LLDP Daemon", "0.0.1")
+        .openapi("Oxide LLDP Daemon", "0.0.1".parse().unwrap())
         .description("API for managing the LLDP daemon")
         .contact_url("https://oxide.computer")
         .contact_email("api@oxide.computer")

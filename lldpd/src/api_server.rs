@@ -826,8 +826,9 @@ fn launch_server(
 ) -> anyhow::Result<ApiServer> {
     let config_dropshot = dropshot::ConfigDropshot {
         bind_address: *addr,
-        request_body_max_bytes: 10240,
+        default_request_body_max_bytes: 10240,
         default_handler_task_mode: dropshot::HandlerTaskMode::Detached,
+        log_headers: Vec::new(),
     };
     let log = global
         .log
