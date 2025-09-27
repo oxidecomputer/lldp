@@ -7,6 +7,6 @@ edition = "2018"
 anyhow.workspace = true
 camino.workspace = true
 chrono.workspace = true
+clap.workspace = true
 omicron-zone-package.workspace = true
-structopt.workspace = true
 tokio.workspace = true
