@@ -5116,8 +5116,8 @@ dependencies = [
  "anyhow",
  "camino",
  "chrono",
+ "clap 4.5.45",
  "omicron-zone-package",
- "structopt",
  "tokio",
 ]
 
