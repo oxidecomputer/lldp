@@ -44,7 +44,7 @@ pub enum DistFormat {
 #[clap(name = "xtask")]
 enum Xtasks {
     /// manage OpenAPI documents
-    Openapi(external::External),
+    Openapi(Box<external::External>),
     /// build an installable dataplane controller package
     Dist {
         /// package release bits
