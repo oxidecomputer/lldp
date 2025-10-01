@@ -8,10 +8,9 @@ use std::fs;
 #[cfg(target_os = "illumos")]
 use std::io::Read;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
-use structopt::*;
+use clap::{Parser, ValueEnum};
 
 #[cfg(target_os = "illumos")]
 mod illumos;
@@ -25,40 +24,31 @@ use linux as plat;
 
 // Possible formats for a bundled dendrite distro.  Currently the two "zone"
 // package formats are helios-only.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug, ValueEnum)]
 pub enum DistFormat {
-    Native,  // .deb or .p5p, depending on the platform
-    Omicron, // package to be included in an omicron zone
-    Global,  // package to run standalone in the global zone
+    /// .deb or .p5p, depending on the platform
+    #[value(alias = "n")]
+    Native,
+    /// package to be included in an omicron zone
+    #[value(alias = "o")]
+    Omicron,
+    /// package to run standalone in the global zone
+    #[value(alias = "g")]
+    Global,
 }
 
-type ParseError = &'static str;
-impl FromStr for DistFormat {
-    type Err = ParseError;
-    fn from_str(format: &str) -> Result<Self, Self::Err> {
-        match format {
-            "native" | "n" => Ok(DistFormat::Native),
-            "omicron" | "o" => Ok(DistFormat::Omicron),
-            "global" | "g" => Ok(DistFormat::Global),
-            _ => Err("Could not parse distribution format"),
-        }
-    }
-}
-
-#[derive(Debug, StructOpt)]
-#[structopt(name = "xtask", about = "lldp xtask support")]
+#[derive(Debug, Parser)]
+/// lldp xtask support
+#[clap(name = "xtask")]
 enum Xtasks {
-    #[structopt(about = "build an installable dataplane controller package")]
+    /// build an installable dataplane controller package
     Dist {
-        #[structopt(short, long, help = "package release bits ")]
+        /// package release bits
+        #[clap(short, long)]
         release: bool,
 
-        #[structopt(
-            short,
-            long,
-            help = "package format: omicron, global zone, os-native",
-            default_value = "native"
-        )]
+        /// package format: omicron, global zone, os-native
+        #[clap(short, long, default_value = "native")]
         format: DistFormat,
     },
 }
@@ -103,7 +93,7 @@ fn collect_binaries(release: bool, dst: &str) -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-    let task = Xtasks::from_args();
+    let task = Xtasks::parse();
     if let Err(e) = match task {
         Xtasks::Dist { release, format } => plat::dist(release, format).await,
     } {
