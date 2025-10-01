@@ -92,8 +92,6 @@ pub struct SwitchInfo {
 enum Args {
     /// Run the LLDPD API server.
     Run(Opt),
-    /// Generate an OpenAPI specification for the LLDPD server.
-    Openapi,
 }
 
 #[derive(Debug, StructOpt)]
@@ -246,23 +244,11 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     Ok(())
 }
 
-fn print_openapi() -> LldpdResult<()> {
-    lldpd_api::lldpd_api_mod::stub_api_description()
-        .unwrap()
-        .openapi("Oxide LLDP Daemon", "0.0.1".parse().unwrap())
-        .description("API for managing the LLDP daemon")
-        .contact_url("https://oxide.computer")
-        .contact_email("api@oxide.computer")
-        .write(&mut std::io::stdout())
-        .map_err(|e| LldpdError::Io(e.into()))
-}
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> LldpdResult<()> {
     let args = Args::from_args();
 
     match args {
-        Args::Openapi => print_openapi(),
         Args::Run(opt) => run_lldpd(opt).await,
     }
 }

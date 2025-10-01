@@ -12,6 +12,8 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 
+mod external;
+
 #[cfg(target_os = "illumos")]
 mod illumos;
 #[cfg(target_os = "illumos")]
@@ -41,6 +43,8 @@ pub enum DistFormat {
 /// lldp xtask support
 #[clap(name = "xtask")]
 enum Xtasks {
+    /// manage OpenAPI documents
+    Openapi(Box<external::External>),
     /// build an installable dataplane controller package
     Dist {
         /// package release bits
@@ -95,6 +99,9 @@ fn collect_binaries(release: bool, dst: &str) -> Result<()> {
 async fn main() {
     let task = Xtasks::parse();
     if let Err(e) = match task {
+        Xtasks::Openapi(external) => {
+            external.exec_bin("lldp-dropshot-apis", "lldp-dropshot-apis")
+        }
         Xtasks::Dist { release, format } => plat::dist(release, format).await,
     } {
         eprintln!("failed: {e}");

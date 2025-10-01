@@ -652,6 +652,10 @@ pub async fn api_server_manager(
     }
 }
 
+pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
+    lldpd_api_mod::api_description::<LldpdApiImpl>().unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::api_server::build_info;
@@ -671,8 +675,4 @@ mod tests {
         let ours = std::str::from_utf8(&out.stdout).unwrap().trim();
         assert_eq!(info.git_sha, ours);
     }
-}
-
-pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
-    lldpd_api_mod::api_description::<LldpdApiImpl>().unwrap()
 }
