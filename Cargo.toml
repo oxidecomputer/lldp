@@ -2,6 +2,7 @@
 
 members = [
 	"adm",
+	"dropshot-apis",
 	"lldpd-api",
 	"lldpd-client",
 	"lldpd-common",
@@ -30,7 +31,9 @@ anyhow = "1.0"
 camino = { version = "1.1", features = ["serde1"] }
 chrono = "0.4"
 clap = { version = "4.5.45", features = ["derive"] }
-dropshot = "0.16.3"
+dropshot = "0.16.4"
+dropshot-api-manager = "0.2.2"
+dropshot-api-manager-types = "0.2.2"
 futures = "0.3"
 http = "0.2.9"
 omicron-zone-package = "0.11.1"
