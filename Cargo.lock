@@ -1938,6 +1938,7 @@ dependencies = [
  "lldpd-api",
  "lldpd-common",
  "lldpd-types",
+ "omicron-common",
  "protocol 0.1.0",
  "schemars",
  "serde",
@@ -1956,6 +1957,7 @@ name = "lldpd-api"
 version = "0.1.0"
 dependencies = [
  "dropshot",
+ "dropshot-api-manager-types",
  "lldpd-types",
  "protocol 0.1.0",
  "schemars",

@@ -15,7 +15,7 @@ pub const fn default_port() -> u16 {
 
 // Automatically generate the client bindings using Progenitor.
 progenitor::generate_api!(
-    spec = "../openapi/lldpd.json",
+    spec = "../openapi/lldpd/lldpd-latest.json",
     interface = Positional,
     inner_type = slog::Logger,
     pre_hook = (|log: &slog::Logger, request: &reqwest::Request| {

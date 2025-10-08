@@ -17,6 +17,7 @@ http.workspace = true
 lldpd-api.workspace = true
 lldpd-common.workspace = true
 lldpd-types.workspace = true
+omicron-common.workspace = true
 protocol.workspace = true
 signal-hook.workspace = true
 serde.workspace = true

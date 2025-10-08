@@ -32,8 +32,8 @@ pub fn environment() -> anyhow::Result<Environment> {
 pub fn all_apis() -> anyhow::Result<ManagedApis> {
     let apis = vec![ManagedApiConfig {
         ident: "lldpd",
-        versions: Versions::Lockstep {
-            version: semver::Version::new(0, 0, 1),
+        versions: Versions::Versioned {
+            supported_versions: lldpd_api::supported_versions(),
         },
         title: "Oxide LLDP Daemon",
         metadata: ManagedApiMetadata {
