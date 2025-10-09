@@ -25,6 +25,7 @@ protocol = { path = "protocol" }
 
 # oxide dependencies from github
 dpd-client = { git = "https://github.com/oxidecomputer/dendrite", branch = "main" }
+omicron-common = { git = "https://github.com/oxidecomputer/omicron", branch = "main" }
 
 # public dependencies from crates.io
 anyhow = "1.0"

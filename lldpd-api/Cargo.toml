@@ -6,6 +6,7 @@ license = "MPL-2.0"
 
 [dependencies]
 dropshot.workspace = true
+dropshot-api-manager-types.workspace = true
 lldpd-types.workspace = true
 protocol.workspace = true
 schemars.workspace = true

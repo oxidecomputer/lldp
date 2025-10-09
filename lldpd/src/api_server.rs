@@ -12,6 +12,7 @@ use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use dropshot::ClientSpecifiesVersionInHeader;
 use dropshot::EmptyScanParams;
 use dropshot::HttpError;
 use dropshot::HttpResponseCreated;
@@ -24,6 +25,7 @@ use dropshot::Query;
 use dropshot::RequestContext;
 use dropshot::ResultsPage;
 use dropshot::TypedBody;
+use dropshot::VersionPolicy;
 use dropshot::WhichPage;
 use lldpd_api::*;
 use lldpd_types::build_info::BuildInfo;
@@ -573,17 +575,22 @@ fn launch_server(
         default_handler_task_mode: dropshot::HandlerTaskMode::Detached,
         log_headers: Vec::new(),
     };
-    let log = global
-        .log
-        .new(o!("unit" => "api-server", "server_id" => id.to_string()));
 
-    slog::info!(log, "starting api server {id} on {addr}");
-    dropshot::HttpServerStarter::new(
-        &config_dropshot,
+    dropshot::ServerBuilder::new(
         http_api(),
         global.clone(),
-        &log,
+        global
+            .log
+            .new(o!("unit" => "api-server", "server_id" => id.to_string())),
     )
+    .config(config_dropshot)
+    .version_policy(VersionPolicy::Dynamic(Box::new(
+        ClientSpecifiesVersionInHeader::new(
+            omicron_common::api::VERSION_HEADER,
+            lldpd_api::latest_version(),
+        ),
+    )))
+    .build_starter()
     .map(|s| s.start())
     .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
