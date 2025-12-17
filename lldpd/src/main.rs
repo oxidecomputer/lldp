@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use lldpd_api::SwitchIdentifiers;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 use slog::debug;
@@ -24,6 +25,7 @@ pub use types::LldpdResult;
 mod api_server;
 mod errors;
 mod interfaces;
+mod mgs;
 mod types;
 
 #[cfg(feature = "dendrite")]
@@ -56,6 +58,8 @@ pub struct Global {
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
     /// List of interfaces we are managing
     pub interfaces: Mutex<BTreeMap<String, Arc<Mutex<Interface>>>>,
+    /// Switch slot we are managing
+    pub switch_identifiers: Mutex<SwitchIdentifiers>,
 }
 
 unsafe impl Send for Global {}
@@ -74,6 +78,7 @@ impl Global {
             switchinfo: Mutex::new(switchinfo),
             listen_addresses: Mutex::new(Vec::new()),
             interfaces: Mutex::new(BTreeMap::new()),
+            switch_identifiers: Mutex::new(SwitchIdentifiers { slot: None }),
         }
     }
 }
@@ -138,6 +143,14 @@ pub(crate) struct Opt {
         about = "String to use as the SystemDescription"
     )]
     system_description: Option<String>,
+
+    #[structopt(
+        long = "mgs-addr",
+        short = "m",
+        about = "SocketAddr the MGS service is listening on.",
+        default_value = "[::1]:12225"
+    )]
+    mgs_addr: SocketAddr,
 }
 
 #[allow(unused_variables)]
@@ -224,6 +237,11 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         let g = global.clone();
         _ = tokio::task::spawn(async move { dendrite::link_monitor(g).await })
     }
+
+    let mgs_global = global.clone();
+    _ = tokio::task::spawn(async move {
+        mgs::detect_switch_slot(mgs_global, opts.mgs_addr).await
+    });
 
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
     let api_global = global.clone();

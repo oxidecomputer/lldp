@@ -37,6 +37,7 @@ use slog::debug;
 use slog::error;
 use slog::info;
 use slog::o;
+use SwitchIdentifiers;
 
 use crate::interfaces;
 use crate::Global;
@@ -552,6 +553,13 @@ impl LldpdApi for LldpdApiImpl {
         _rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<BuildInfo>, HttpError> {
         Ok(HttpResponseOk(build_info()))
+    }
+
+    async fn switch_identifiers(
+        _rqctx: RequestContext<Self::Context>,
+    ) -> Result<HttpResponseOk<SwitchIdentifiers>, HttpError> {
+        // TODO: implement actual slot detection
+        Ok(HttpResponseOk(SwitchIdentifiers { slot: None }))
     }
 }
 

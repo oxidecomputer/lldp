@@ -33,6 +33,7 @@ api_versions!([
     // |  example for the next person.
     // v
     // (next_int, IDENT),
+    (2, SWITCH_IDENTIFIERS),
     (1, INITIAL),
 ]);
 
@@ -385,6 +386,24 @@ pub trait LldpdApi {
     async fn build_info(
         _rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<BuildInfo>, HttpError>;
+
+    #[endpoint {
+        method = GET,
+        path = "/switch/identifiers",
+        versions = VERSION_SWITCH_IDENTIFIERS..,
+    }]
+    async fn switch_identifiers(
+        ctx: RequestContext<Self::Context>,
+    ) -> Result<HttpResponseOk<SwitchIdentifiers>, HttpError>;
+}
+
+/// Identifiers for a switch.
+#[derive(Clone, Debug, JsonSchema, Serialize)]
+pub struct SwitchIdentifiers {
+    /// The slot number of the switch being managed.
+    ///
+    /// MGS uses u16 for this internally.
+    pub slot: Option<u16>,
 }
 
 #[derive(Deserialize, Serialize, JsonSchema)]
