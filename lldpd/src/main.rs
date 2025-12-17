@@ -99,7 +99,7 @@ enum Args {
     Run(Opt),
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub(crate) struct Opt {
     #[structopt(long, about = "log file")]
     log_file: Option<String>,
@@ -224,7 +224,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         &log,
         switchinfo.clone(),
         #[cfg(feature = "dendrite")]
-        dendrite::dpd_init(&log, opts).await,
+        dendrite::dpd_init(&log, opts.clone()).await,
     ));
 
     #[cfg(feature = "smf")]
