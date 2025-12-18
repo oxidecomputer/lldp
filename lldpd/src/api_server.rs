@@ -37,7 +37,6 @@ use slog::debug;
 use slog::error;
 use slog::info;
 use slog::o;
-use SwitchIdentifiers;
 
 use crate::interfaces;
 use crate::Global;
