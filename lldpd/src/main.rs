@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -151,6 +152,13 @@ pub(crate) struct Opt {
         default_value = "[::1]:12225"
     )]
     mgs_addr: SocketAddr,
+
+    #[structopt(
+        long = "mgs-addr",
+        short = "m",
+        about = "SocketAddr LLDPD should listening on. (default locahost:12230)"
+    )]
+    listen_addr: Option<SocketAddr>,
 }
 
 #[allow(unused_variables)]
@@ -243,10 +251,15 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         mgs::detect_switch_slot(mgs_global, opts.mgs_addr).await
     });
 
+    let listen_addr = opts.listen_addr.unwrap_or(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        lldpd_common::DEFAULT_LLDPD_PORT,
+    ));
+
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
     let api_global = global.clone();
     let api_server_manager = tokio::task::spawn(async move {
-        api_server::api_server_manager(api_global, api_rx).await
+        api_server::api_server_manager(listen_addr, api_global, api_rx).await
     });
 
     signal_handler(global.clone(), api_tx).await;

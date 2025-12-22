@@ -7,8 +7,6 @@
 //! LLDP HTTP API types and endpoint functions.
 
 use std::collections::HashMap;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -607,6 +605,7 @@ fn launch_server(
 // smf_rx channel, which tells us to re-evaluate the set of api_server
 // addresses.
 pub async fn api_server_manager(
+    listen_addr: SocketAddr,
     global: Arc<Global>,
     mut smf_rx: tokio::sync::watch::Receiver<()>,
 ) {
@@ -619,10 +618,7 @@ pub async fn api_server_manager(
         let active_addrs = active.keys().cloned().collect::<Vec<SocketAddr>>();
         let mut config_addrs = global.listen_addresses.lock().unwrap().to_vec();
         // We always listen on localhost
-        config_addrs.push(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            lldpd_common::DEFAULT_LLDPD_PORT,
-        ));
+        config_addrs.push(listen_addr);
         // Get the list of all the addresses we should be listening on,
         // and compare it to the list we currently are listening on.
         let (add, remove) =
