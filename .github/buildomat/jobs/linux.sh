@@ -11,22 +11,22 @@
 #: [[publish]]
 #: series = "linux"
 #: name = "lldp-0.1.0.deb"
-#: from_output = "lldp-0.1.0.deb"
+#: from_output = "/out/lldp-0.1.0.deb"
 #:
 #: [[publish]]
 #: series = "linux"
 #: name = "lldp-0.1.0.deb.sha256.txt"
-#: from_output = "lldp-0.1.0.deb.sha256.txt"
+#: from_output = "/out/lldp-0.1.0.deb.sha256.txt"
 #:
 #: [[publish]]
 #: series = "linux"
 #: name = "lldpd"
-#: from_output = "lldpd"
+#: from_output = "/out/lldpd"
 #:
 #: [[publish]]
 #: series = "linux"
 #: name = "lldpadm"
-#: from_output = "lldpadm"
+#: from_output = "/out/lldpadm"
 #:
 
 set -o errexit
