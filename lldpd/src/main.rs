@@ -154,8 +154,8 @@ pub(crate) struct Opt {
     mgs_addr: SocketAddr,
 
     #[structopt(
-        long = "mgs-addr",
-        short = "m",
+        long = "listen-addr",
+        short = "a",
         about = "SocketAddr LLDPD should listening on. (default locahost:12230)"
     )]
     listen_addr: Option<SocketAddr>,
