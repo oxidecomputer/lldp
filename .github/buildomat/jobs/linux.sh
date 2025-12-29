@@ -48,6 +48,10 @@ set -o errexit
 set -o pipefail
 set -o xtrace
 
+function digest {
+    shasum -a 256 "$1" | awk -F ' ' '{print $1}'
+}
+
 # Install the active Rust toolchain from rust-toolchain.toml. We need this
 # because `rustup` version 1.28 made it where the toolchain is not installed by
 # default.
@@ -65,10 +69,10 @@ pfexec mkdir -p /out
 pfexec chown "$UID" /out
 
 cp target/release/lldpadm /out/
-digest -a sha256 /out/lldpadm > /out/lldpadm.sha256.txt
+digest /out/lldpadm > /out/lldpadm.sha256.txt
 cp target/release/lldpd /out/
-digest -a sha256 /out/lldpd > /out/lldpd.sha256.txt
+digest /out/lldpd > /out/lldpd.sha256.txt
 
 cargo xtask dist --release
 cp lldp-0.1.0.deb /out/
-digest -a sha256 lldp-0.1.0.deb > /out/lldp-0.1.0.deb.sha256.txt
+digest lldp-0.1.0.deb > /out/lldp-0.1.0.deb.sha256.txt
