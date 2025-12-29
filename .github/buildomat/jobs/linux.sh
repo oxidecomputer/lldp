@@ -5,7 +5,12 @@
 #: target = "ubuntu-22.04"
 #: rust_toolchain = true
 #: output_rules = [
-#:   "/out/*",
+#:   "/out/lldp-0.1.0.deb",
+#:   "/out/lldp-0.1.0.deb.sha256.txt",
+#:   "/out/lldpd",
+#:   "/out/lldpd.sha256.txt",
+#:   "/out/lldpadm",
+#:   "/out/lldpadm.sha256.txt",
 #: ]
 #:
 #: [[publish]]
@@ -25,8 +30,18 @@
 #:
 #: [[publish]]
 #: series = "linux"
+#: name = "lldpd"
+#: from_output = "/out/lldpd.sha256.txt"
+#:
+##: [[publish]]
+#: series = "linux"
 #: name = "lldpadm"
 #: from_output = "/out/lldpadm"
+#:
+#: [[publish]]
+#: series = "linux"
+#: name = "lldpadm"
+#: from_output = "/out/lldpadm.sha256.txt"
 #:
 
 set -o errexit
@@ -54,7 +69,9 @@ pfexec mkdir -p /out
 pfexec chown "$UID" /out
 
 cp target/release/lldpadm /out/
+digest -a sha256 /out/lldpadm > /out/lldpadm.sha256.txt
 cp target/release/lldpd /out/
+digest -a sha256 /out/lldpd > /out/lldpd.sha256.txt
 
 cargo xtask dist --release
 cp lldp-0.1.0.deb /out/
