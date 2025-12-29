@@ -33,7 +33,7 @@
 #: name = "lldpd.sha256.txt"
 #: from_output = "/out/lldpd.sha256.txt"
 #:
-##: [[publish]]
+#: [[publish]]
 #: series = "linux"
 #: name = "lldpadm"
 #: from_output = "/out/lldpadm"
