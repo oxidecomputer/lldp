@@ -5,12 +5,12 @@
 #: target = "ubuntu-22.04"
 #: rust_toolchain = true
 #: output_rules = [
-#:   "/out/lldp-0.1.0.deb",
-#:   "/out/lldp-0.1.0.deb.sha256.txt",
-#:   "/out/lldpd",
-#:   "/out/lldpd.sha256.txt",
-#:   "/out/lldpadm",
-#:   "/out/lldpadm.sha256.txt",
+#:   "=/out/lldp-0.1.0.deb",
+#:   "=/out/lldp-0.1.0.deb.sha256.txt",
+#:   "=/out/lldpd",
+#:   "=/out/lldpd.sha256.txt",
+#:   "=/out/lldpadm",
+#:   "=/out/lldpadm.sha256.txt",
 #: ]
 #:
 #: [[publish]]
@@ -30,7 +30,7 @@
 #:
 #: [[publish]]
 #: series = "linux"
-#: name = "lldpd"
+#: name = "lldpd.sha256.txt"
 #: from_output = "/out/lldpd.sha256.txt"
 #:
 ##: [[publish]]
@@ -40,7 +40,7 @@
 #:
 #: [[publish]]
 #: series = "linux"
-#: name = "lldpadm"
+#: name = "lldpadm.sha256.txt"
 #: from_output = "/out/lldpadm.sha256.txt"
 #:
 
