@@ -553,10 +553,19 @@ impl LldpdApi for LldpdApiImpl {
     }
 
     async fn switch_identifiers(
-        _rqctx: RequestContext<Self::Context>,
+        rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<SwitchIdentifiers>, HttpError> {
-        // TODO: implement actual slot detection
-        Ok(HttpResponseOk(SwitchIdentifiers { slot: None }))
+        let identifiers = match rqctx.context().switch_identifiers.lock() {
+            Ok(v) => v,
+            Err(e) => {
+                error!(rqctx.log, "unable to read switch identifiers"; "error" => %e);
+                return Err(HttpError::for_internal_error(
+                    "unable to read switch identifiers".into(),
+                ));
+            }
+        };
+        let slot = identifiers.slot;
+        Ok(HttpResponseOk(SwitchIdentifiers { slot }))
     }
 }
 
