@@ -62,7 +62,7 @@ sudo apt update -y
 sudo apt install -y libpcap-dev libclang-dev libssl-dev pkg-config
 
 banner "Build"
-cargo build --release
+cargo build --release --verbose --features "dendrite"
 
 banner "Artifacts"
 pfexec mkdir -p /out
