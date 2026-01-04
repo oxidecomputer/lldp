@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -252,7 +252,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
     });
 
     let listen_addr = opts.listen_addr.unwrap_or(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        IpAddr::V6(Ipv6Addr::LOCALHOST),
         lldpd_common::DEFAULT_LLDPD_PORT,
     ));
 
