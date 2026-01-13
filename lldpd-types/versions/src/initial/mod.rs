@@ -4,4 +4,11 @@
 //
 // Copyright 2025 Oxide Computer Company
 
-pub use lldpd_types_versions::latest::build_info::*;
+//! Version `INITIAL` of the LLDP daemon API.
+//!
+//! This is the first version of the API.
+
+pub mod build_info;
+pub mod interfaces;
+pub mod neighbor;
+pub mod system_info;
