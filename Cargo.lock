@@ -1890,7 +1890,7 @@ version = "0.1.0"
 dependencies = [
  "dropshot",
  "dropshot-api-manager-types",
- "lldpd-types",
+ "lldpd-types-versions",
  "protocol 0.1.0",
  "schemars",
  "serde",
@@ -1903,6 +1903,7 @@ dependencies = [
  "chrono",
  "futures",
  "lldpd-common",
+ "lldpd-types-versions",
  "progenitor",
  "protocol 0.1.0",
  "reqwest",
@@ -1931,6 +1932,13 @@ dependencies = [
 
 [[package]]
 name = "lldpd-types"
+version = "0.1.0"
+dependencies = [
+ "lldpd-types-versions",
+]
+
+[[package]]
+name = "lldpd-types-versions"
 version = "0.1.0"
 dependencies = [
  "chrono",

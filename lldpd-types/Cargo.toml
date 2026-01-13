@@ -5,8 +5,4 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-chrono.workspace = true
-protocol.workspace = true
-schemars = { workspace = true, features = ["chrono"] }
-serde.workspace = true
-uuid.workspace = true
+lldpd-types-versions.workspace = true
