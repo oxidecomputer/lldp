@@ -82,7 +82,7 @@ archive $PKG
 
 PKG="lldpd-no-smf"
 banner build $PKG
-ptime -m cargo build --release --locked
+ptime -m cargo build --release --locked --features "dendrite"
 banner output
 mv target/release/lldpd /out/$PKG
 digest -a sha256 /out/$PKG > /out/$PKG.sha256.txt
