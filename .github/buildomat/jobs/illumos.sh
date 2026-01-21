@@ -30,8 +30,8 @@
 #:
 #: [[publish]]
 #: series = "image"
-#: name = "lldp-no-smf.tar.gz"
-#: from_output = "/out/lldp.tar.gz"
+#: name = "lldp-no-smf.gz"
+#: from_output = "/out/lldp-no-smf.gz"
 #:
 #: [[publish]]
 #: series = "image"
@@ -40,8 +40,8 @@
 #:
 #: [[publish]]
 #: series = "image"
-#: name = "lldp-no-smf.tar.gz.sha256.txt"
-#: from_output = "/out/lldp-no-smf.tar.gz.sha256.txt"
+#: name = "lldp-no-smf.gz.sha256.txt"
+#: from_output = "/out/lldp-no-smf.gz.sha256.txt"
 #:
 
 set -o errexit
