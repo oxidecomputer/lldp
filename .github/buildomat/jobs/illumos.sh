@@ -28,6 +28,21 @@
 #: name = "lldp.sha256.txt"
 #: from_output = "/out/lldp.sha256.txt"
 #:
+#: [[publish]]
+#: series = "image"
+#: name = "lldp-no-smf.tar.gz"
+#: from_output = "/out/lldp.tar.gz"
+#:
+#: [[publish]]
+#: series = "image"
+#: name = "lldp-no-smf.sha256.txt"
+#: from_output = "/out/lldp-no-smf.sha256.txt"
+#:
+#: [[publish]]
+#: series = "image"
+#: name = "lldp-no-smf.tar.gz.sha256.txt"
+#: from_output = "/out/lldp-no-smf.tar.gz.sha256.txt"
+#:
 
 set -o errexit
 set -o pipefail
@@ -64,3 +79,13 @@ banner package $PKG
 ptime -m cargo xtask dist --release
 banner archive $PKG
 archive $PKG
+
+PKG="lldpd-no-smf"
+banner build $PKG
+ptime -m cargo build --release --locked --features "dendrite"
+banner output
+mv target/release/lldpd /out/$PKG
+digest -a sha256 /out/$PKG > /out/$PKG.sha256.txt
+banner archive
+gzip /out/$PKG
+digest -a sha256 /out/$PKG.gz > /out/$PKG.gz.sha256.txt
