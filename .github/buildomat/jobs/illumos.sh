@@ -36,17 +36,17 @@
 #:
 #: [[publish]]
 #: series = "image"
-#: name = "lldp-no-smf.gz"
+#: name = "lldpd-no-smf.gz"
 #: from_output = "/out/lldpd-no-smf.gz"
 #:
 #: [[publish]]
 #: series = "image"
-#: name = "lldp-no-smf.sha256.txt"
+#: name = "lldpd-no-smf.sha256.txt"
 #: from_output = "/out/lldpd-no-smf.sha256.txt"
 #:
 #: [[publish]]
 #: series = "image"
-#: name = "lldp-no-smf.gz.sha256.txt"
+#: name = "lldpd-no-smf.gz.sha256.txt"
 #: from_output = "/out/lldpd-no-smf.gz.sha256.txt"
 #:
 
