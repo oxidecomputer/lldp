@@ -5,13 +5,13 @@
 #: target = "helios-2.0"
 #: rust_toolchain = true
 #: output_rules = [
-#    "=/out/lldp.p5p",
-#    "=/out/lldp.p5p.sha256.txt",
-#    "=/out/lldp.tar.gz",
-#    "=/out/lldp.sha256.txt",
-#    "=/out/lldp-no-smf.gz",
-#    "=/out/lldp-no-smf.sha256.txt",
-#    "=/out/lldp-no-smf.gz.sha256.txt",
+#   "=/out/lldp.p5p",
+#   "=/out/lldp.p5p.sha256.txt",
+#   "=/out/lldp.tar.gz",
+#   "=/out/lldp.sha256.txt",
+#   "=/out/lldp-no-smf.gz",
+#   "=/out/lldp-no-smf.sha256.txt",
+#   "=/out/lldp-no-smf.gz.sha256.txt",
 #: ]
 #:
 #: [[publish]]
