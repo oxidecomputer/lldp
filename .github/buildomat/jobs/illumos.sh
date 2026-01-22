@@ -15,37 +15,37 @@
 #: ]
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp.p5p"
 #: from_output = "/out/lldp.p5p"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp.p5p.sha256.txt"
 #: from_output = "/out/lldp.p5p.sha256.txt"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp.tar.gz"
 #: from_output = "/out/lldp.tar.gz"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp.sha256.txt"
 #: from_output = "/out/lldp.sha256.txt"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp-no-smf.gz"
 #: from_output = "/out/lldp-no-smf.gz"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp-no-smf.sha256.txt"
 #: from_output = "/out/lldp-no-smf.sha256.txt"
 #:
 #: [[publish]]
-#: series = "image"
+#: series = "illumos"
 #: name = "lldp-no-smf.gz.sha256.txt"
 #: from_output = "/out/lldp-no-smf.gz.sha256.txt"
 #:
