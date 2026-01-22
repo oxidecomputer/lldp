@@ -9,9 +9,9 @@
 #:  "=/out/lldp.p5p.sha256.txt",
 #:  "=/out/lldp.tar.gz",
 #:  "=/out/lldp.sha256.txt",
-#:  "=/out/lldp-no-smf.gz",
-#:  "=/out/lldp-no-smf.sha256.txt",
-#:  "=/out/lldp-no-smf.gz.sha256.txt",
+#:  "=/out/lldpd-no-smf.gz",
+#:  "=/out/lldpd-no-smf.sha256.txt",
+#:  "=/out/lldpd-no-smf.gz.sha256.txt",
 #: ]
 #:
 #: [[publish]]
@@ -37,17 +37,17 @@
 #: [[publish]]
 #: series = "illumos"
 #: name = "lldp-no-smf.gz"
-#: from_output = "/out/lldp-no-smf.gz"
+#: from_output = "/out/lldpd-no-smf.gz"
 #:
 #: [[publish]]
 #: series = "illumos"
 #: name = "lldp-no-smf.sha256.txt"
-#: from_output = "/out/lldp-no-smf.sha256.txt"
+#: from_output = "/out/lldpd-no-smf.sha256.txt"
 #:
 #: [[publish]]
 #: series = "illumos"
 #: name = "lldp-no-smf.gz.sha256.txt"
-#: from_output = "/out/lldp-no-smf.gz.sha256.txt"
+#: from_output = "/out/lldpd-no-smf.gz.sha256.txt"
 #:
 
 set -o errexit
