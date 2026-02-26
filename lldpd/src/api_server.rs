@@ -7,8 +7,6 @@
 //! LLDP HTTP API types and endpoint functions.
 
 use std::collections::HashMap;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -553,6 +551,22 @@ impl LldpdApi for LldpdApiImpl {
     ) -> Result<HttpResponseOk<BuildInfo>, HttpError> {
         Ok(HttpResponseOk(build_info()))
     }
+
+    async fn switch_identifiers(
+        rqctx: RequestContext<Self::Context>,
+    ) -> Result<HttpResponseOk<SwitchIdentifiers>, HttpError> {
+        let identifiers = match rqctx.context().switch_identifiers.lock() {
+            Ok(v) => v,
+            Err(e) => {
+                error!(rqctx.log, "unable to read switch identifiers"; "error" => %e);
+                return Err(HttpError::for_internal_error(
+                    "unable to read switch identifiers".into(),
+                ));
+            }
+        };
+        let slot = identifiers.slot;
+        Ok(HttpResponseOk(SwitchIdentifiers { slot }))
+    }
 }
 
 /// The API server manager is a task that is responsible for launching and
@@ -600,6 +614,7 @@ fn launch_server(
 // smf_rx channel, which tells us to re-evaluate the set of api_server
 // addresses.
 pub async fn api_server_manager(
+    listen_addr: SocketAddr,
     global: Arc<Global>,
     mut smf_rx: tokio::sync::watch::Receiver<()>,
 ) {
@@ -612,10 +627,7 @@ pub async fn api_server_manager(
         let active_addrs = active.keys().cloned().collect::<Vec<SocketAddr>>();
         let mut config_addrs = global.listen_addresses.lock().unwrap().to_vec();
         // We always listen on localhost
-        config_addrs.push(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            lldpd_common::DEFAULT_LLDPD_PORT,
-        ));
+        config_addrs.push(listen_addr);
         // Get the list of all the addresses we should be listening on,
         // and compare it to the list we currently are listening on.
         let (add, remove) =

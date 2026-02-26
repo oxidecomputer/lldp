@@ -7,10 +7,12 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::net::IpAddr;
+use std::net::Ipv6Addr;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use lldpd_api::SwitchIdentifiers;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 use slog::debug;
@@ -24,6 +26,7 @@ pub use types::LldpdResult;
 mod api_server;
 mod errors;
 mod interfaces;
+mod mgs;
 mod types;
 
 #[cfg(feature = "dendrite")]
@@ -56,6 +59,8 @@ pub struct Global {
     pub listen_addresses: Mutex<Vec<SocketAddr>>,
     /// List of interfaces we are managing
     pub interfaces: Mutex<BTreeMap<String, Arc<Mutex<Interface>>>>,
+    /// Switch slot we are managing
+    pub switch_identifiers: Mutex<SwitchIdentifiers>,
 }
 
 unsafe impl Send for Global {}
@@ -74,6 +79,7 @@ impl Global {
             switchinfo: Mutex::new(switchinfo),
             listen_addresses: Mutex::new(Vec::new()),
             interfaces: Mutex::new(BTreeMap::new()),
+            switch_identifiers: Mutex::new(SwitchIdentifiers { slot: None }),
         }
     }
 }
@@ -94,7 +100,7 @@ enum Args {
     Run(Opt),
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub(crate) struct Opt {
     #[structopt(long, about = "log file")]
     log_file: Option<String>,
@@ -138,6 +144,21 @@ pub(crate) struct Opt {
         about = "String to use as the SystemDescription"
     )]
     system_description: Option<String>,
+
+    #[structopt(
+        long = "mgs-addr",
+        short = "m",
+        about = "SocketAddr the MGS service is listening on.",
+        default_value = "[::1]:12225"
+    )]
+    mgs_addr: SocketAddr,
+
+    #[structopt(
+        long = "listen-addr",
+        short = "a",
+        about = "SocketAddr LLDPD should listening on. (default locahost:12230)"
+    )]
+    listen_addr: Option<SocketAddr>,
 }
 
 #[allow(unused_variables)]
@@ -211,7 +232,7 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         &log,
         switchinfo.clone(),
         #[cfg(feature = "dendrite")]
-        dendrite::dpd_init(&log, opts).await,
+        dendrite::dpd_init(&log, opts.clone()).await,
     ));
 
     #[cfg(feature = "smf")]
@@ -225,10 +246,20 @@ async fn run_lldpd(opts: Opt) -> LldpdResult<()> {
         _ = tokio::task::spawn(async move { dendrite::link_monitor(g).await })
     }
 
+    let mgs_global = global.clone();
+    _ = tokio::task::spawn(async move {
+        mgs::detect_switch_slot(mgs_global, opts.mgs_addr).await
+    });
+
+    let listen_addr = opts.listen_addr.unwrap_or(SocketAddr::new(
+        IpAddr::V6(Ipv6Addr::LOCALHOST),
+        lldpd_common::DEFAULT_LLDPD_PORT,
+    ));
+
     let (api_tx, api_rx) = tokio::sync::watch::channel(());
     let api_global = global.clone();
     let api_server_manager = tokio::task::spawn(async move {
-        api_server::api_server_manager(api_global, api_rx).await
+        api_server::api_server_manager(listen_addr, api_global, api_rx).await
     });
 
     signal_handler(global.clone(), api_tx).await;
