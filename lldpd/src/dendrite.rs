@@ -191,7 +191,7 @@ pub async fn dpd_init(
     if opts.no_dpd {
         None
     } else {
-        let host = opts.host.unwrap_or_else(|| "localhost".to_string());
+        let host = opts.host.unwrap_or_else(|| "[::1]".to_string());
         let port = opts.port.unwrap_or(dpd_client::default_port());
         info!(log, "connecting to dpd at {host}:{port}");
         let client_state = ClientState {
