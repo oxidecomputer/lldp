@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 //
-// Copyright 2025 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use dropshot::{
     EmptyScanParams, HttpError, HttpResponseCreated, HttpResponseDeleted,
@@ -25,6 +25,7 @@ api_versions!([
     // |  example for the next person.
     // v
     // (next_int, IDENT),
+    (2, SWITCH_IDENTIFIERS),
     (1, INITIAL),
 ]);
 
@@ -382,4 +383,13 @@ pub trait LldpdApi {
     async fn build_info(
         _rqctx: RequestContext<Self::Context>,
     ) -> Result<HttpResponseOk<latest::build_info::BuildInfo>, HttpError>;
+
+    #[endpoint {
+        method = GET,
+        path = "/switch/identifiers",
+        versions = VERSION_SWITCH_IDENTIFIERS..,
+    }]
+    async fn switch_identifiers(
+        ctx: RequestContext<Self::Context>,
+    ) -> Result<HttpResponseOk<latest::switch::SwitchIdentifiers>, HttpError>;
 }

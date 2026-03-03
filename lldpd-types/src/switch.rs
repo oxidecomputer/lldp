@@ -4,4 +4,4 @@
 //
 // Copyright 2026 Oxide Computer Company
 
-pub use lldpd_types_versions::latest::system_info::*;
+pub use lldpd_types_versions::latest::switch::*;

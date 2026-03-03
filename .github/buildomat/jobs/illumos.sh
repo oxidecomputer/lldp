@@ -5,7 +5,13 @@
 #: target = "helios-2.0"
 #: rust_toolchain = true
 #: output_rules = [
-#:   "/out/*",
+#:  "=/out/lldp.p5p",
+#:  "=/out/lldp.p5p.sha256.txt",
+#:  "=/out/lldp.tar.gz",
+#:  "=/out/lldp.sha256.txt",
+#:  "=/out/lldpd-no-smf.gz",
+#:  "=/out/lldpd-no-smf.sha256.txt",
+#:  "=/out/lldpd-no-smf.gz.sha256.txt",
 #: ]
 #:
 #: [[publish]]
@@ -27,6 +33,21 @@
 #: series = "image"
 #: name = "lldp.sha256.txt"
 #: from_output = "/out/lldp.sha256.txt"
+#:
+#: [[publish]]
+#: series = "image"
+#: name = "lldpd-no-smf.gz"
+#: from_output = "/out/lldpd-no-smf.gz"
+#:
+#: [[publish]]
+#: series = "image"
+#: name = "lldpd-no-smf.sha256.txt"
+#: from_output = "/out/lldpd-no-smf.sha256.txt"
+#:
+#: [[publish]]
+#: series = "image"
+#: name = "lldpd-no-smf.gz.sha256.txt"
+#: from_output = "/out/lldpd-no-smf.gz.sha256.txt"
 #:
 
 set -o errexit
@@ -64,3 +85,13 @@ banner package $PKG
 ptime -m cargo xtask dist --release
 banner archive $PKG
 archive $PKG
+
+PKG="lldpd-no-smf"
+banner build $PKG
+ptime -m cargo build --release --locked --features "dendrite"
+banner output
+mv target/release/lldpd /out/$PKG
+digest -a sha256 /out/$PKG > /out/$PKG.sha256.txt
+banner archive
+gzip /out/$PKG
+digest -a sha256 /out/$PKG.gz > /out/$PKG.gz.sha256.txt
