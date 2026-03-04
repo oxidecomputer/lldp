@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Copyright 2024 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use lldpd_api::SwitchIdentifiers;
+use lldpd_types::switch::SwitchIdentifiers;
 use signal_hook::consts::signal::*;
 use signal_hook::iterator::Signals;
 use slog::debug;

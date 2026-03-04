@@ -4,4 +4,9 @@
 //
 // Copyright 2026 Oxide Computer Company
 
-pub use lldpd_types_versions::latest::system_info::*;
+//! Version `SWITCH_IDENTIFIERS` of the LLDP daemon API.
+//!
+//! Adds the `/switch/identifiers` endpoint, which reports the switch slot
+//! being managed by this lldpd instance.
+
+pub mod switch;

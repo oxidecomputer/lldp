@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Copyright 2024 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 //! LLDP HTTP API types and endpoint functions.
 
@@ -25,12 +25,19 @@ use dropshot::ResultsPage;
 use dropshot::TypedBody;
 use dropshot::VersionPolicy;
 use dropshot::WhichPage;
-use lldpd_api::*;
+use lldpd_api::LldpdApi;
 use lldpd_types::build_info::BuildInfo;
 use lldpd_types::interfaces::Interface;
 use lldpd_types::interfaces::InterfaceAdd;
+use lldpd_types::interfaces::InterfaceAddressPathParams;
+use lldpd_types::interfaces::InterfaceCapabilityPathParams;
+use lldpd_types::interfaces::InterfacePathParams;
 use lldpd_types::neighbor::Neighbor;
 use lldpd_types::neighbor::NeighborId;
+use lldpd_types::neighbor::NeighborToken;
+use lldpd_types::switch::SwitchIdentifiers;
+use lldpd_types::system_info::SystemAddressPathParams;
+use lldpd_types::system_info::SystemCapabilityPathParams;
 use slog::debug;
 use slog::error;
 use slog::info;
@@ -672,7 +679,7 @@ pub async fn api_server_manager(
 }
 
 pub fn http_api() -> dropshot::ApiDescription<Arc<Global>> {
-    lldpd_api_mod::api_description::<LldpdApiImpl>().unwrap()
+    lldpd_api::lldpd_api_mod::api_description::<LldpdApiImpl>().unwrap()
 }
 
 #[cfg(test)]

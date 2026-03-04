@@ -2,9 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 //
-// Copyright 2025 Oxide Computer Company
-
-use std::net::IpAddr;
+// Copyright 2026 Oxide Computer Company
 
 use dropshot::{
     EmptyScanParams, HttpError, HttpResponseCreated, HttpResponseDeleted,
@@ -12,14 +10,8 @@ use dropshot::{
     Query, RequestContext, ResultsPage, TypedBody,
 };
 use dropshot_api_manager_types::api_versions;
-use lldpd_types::{
-    build_info::BuildInfo,
-    interfaces::{Interface, InterfaceAdd},
-    neighbor::{Neighbor, NeighborId},
-};
-use protocol::types::{ChassisId, PortId, SystemCapabilities};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use lldpd_types_versions::latest;
+use protocol::types::{ChassisId, PortId};
 
 api_versions!([
     // WHEN CHANGING THE API (part 1 of 2):
@@ -110,7 +102,7 @@ pub trait LldpdApi {
     }]
     async fn sys_add_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemCapabilityPathParams>,
+        path: Path<latest::system_info::SystemCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     /// Remove a capability from the set of those advertised on all interfaces
@@ -120,7 +112,7 @@ pub trait LldpdApi {
     }]
     async fn sys_del_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemCapabilityPathParams>,
+        path: Path<latest::system_info::SystemCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     /// Add a capability to the set of those advertised as enabled on all interfaces
@@ -130,7 +122,7 @@ pub trait LldpdApi {
     }]
     async fn sys_enable_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemCapabilityPathParams>,
+        path: Path<latest::system_info::SystemCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     /// Remove a capability from the set of those advertised as enabled on all interfaces
@@ -140,7 +132,7 @@ pub trait LldpdApi {
     }]
     async fn sys_disable_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemCapabilityPathParams>,
+        path: Path<latest::system_info::SystemCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     /// Add a management address to the set of those advertised on all interfaces
@@ -150,7 +142,7 @@ pub trait LldpdApi {
     }]
     async fn sys_add_management_addr(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemAddressPathParams>,
+        path: Path<latest::system_info::SystemAddressPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     /// Remove a management address from the set of those advertised on all interfaces
@@ -160,7 +152,7 @@ pub trait LldpdApi {
     }]
     async fn sys_del_management_addr(
         rqctx: RequestContext<Self::Context>,
-        path: Path<SystemAddressPathParams>,
+        path: Path<latest::system_info::SystemAddressPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     /// Remove all management addresses from the set of those advertised on all
@@ -179,8 +171,8 @@ pub trait LldpdApi {
     }]
     async fn interface_add(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
-        params: TypedBody<InterfaceAdd>,
+        path: Path<latest::interfaces::InterfacePathParams>,
+        params: TypedBody<latest::interfaces::InterfaceAdd>,
     ) -> Result<HttpResponseCreated<()>, HttpError>;
 
     #[endpoint {
@@ -189,7 +181,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -198,8 +190,8 @@ pub trait LldpdApi {
     }]
     async fn interface_get(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
-    ) -> Result<HttpResponseOk<Interface>, HttpError>;
+        path: Path<latest::interfaces::InterfacePathParams>,
+    ) -> Result<HttpResponseOk<latest::interfaces::Interface>, HttpError>;
 
     #[endpoint {
         method = GET,
@@ -207,7 +199,7 @@ pub trait LldpdApi {
     }]
     async fn interface_list(
         rqctx: RequestContext<Self::Context>,
-    ) -> Result<HttpResponseOk<Vec<Interface>>, HttpError>;
+    ) -> Result<HttpResponseOk<Vec<latest::interfaces::Interface>>, HttpError>;
 
     #[endpoint {
     	method = POST,
@@ -215,7 +207,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_disabled(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<bool>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
@@ -225,7 +217,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_chassis_id(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<ChassisId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
@@ -235,7 +227,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_chassis_id(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -244,7 +236,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_port_id(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<PortId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
@@ -254,7 +246,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_port_description(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
@@ -264,7 +256,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_port_description(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -273,7 +265,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_system_name(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
@@ -283,7 +275,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_system_name(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -292,7 +284,7 @@ pub trait LldpdApi {
     }]
     async fn interface_set_system_description(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
         body: TypedBody<String>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
     #[endpoint {
@@ -301,7 +293,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_system_description(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -310,7 +302,7 @@ pub trait LldpdApi {
     }]
     async fn interface_add_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceCapabilityPathParams>,
+        path: Path<latest::interfaces::InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     #[endpoint {
@@ -319,7 +311,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceCapabilityPathParams>,
+        path: Path<latest::interfaces::InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -328,7 +320,7 @@ pub trait LldpdApi {
     }]
     async fn interface_enable_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceCapabilityPathParams>,
+        path: Path<latest::interfaces::InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     #[endpoint {
@@ -337,7 +329,7 @@ pub trait LldpdApi {
     }]
     async fn interface_disable_system_capability(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceCapabilityPathParams>,
+        path: Path<latest::interfaces::InterfaceCapabilityPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -346,7 +338,7 @@ pub trait LldpdApi {
     }]
     async fn interface_add_management_addr(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceAddressPathParams>,
+        path: Path<latest::interfaces::InterfaceAddressPathParams>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError>;
 
     #[endpoint {
@@ -355,7 +347,7 @@ pub trait LldpdApi {
     }]
     async fn interface_del_management_addr(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfaceAddressPathParams>,
+        path: Path<latest::interfaces::InterfaceAddressPathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     #[endpoint {
@@ -364,7 +356,7 @@ pub trait LldpdApi {
     }]
     async fn interface_clear_management_addr(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
+        path: Path<latest::interfaces::InterfacePathParams>,
     ) -> Result<HttpResponseDeleted, HttpError>;
 
     /// Return a list of the active neighbors
@@ -374,9 +366,14 @@ pub trait LldpdApi {
     }]
     async fn get_neighbors(
         rqctx: RequestContext<Self::Context>,
-        path: Path<InterfacePathParams>,
-        query: Query<PaginationParams<EmptyScanParams, NeighborToken>>,
-    ) -> Result<HttpResponseOk<ResultsPage<Neighbor>>, HttpError>;
+        path: Path<latest::interfaces::InterfacePathParams>,
+        query: Query<
+            PaginationParams<EmptyScanParams, latest::neighbor::NeighborToken>,
+        >,
+    ) -> Result<
+        HttpResponseOk<ResultsPage<latest::neighbor::Neighbor>>,
+        HttpError,
+    >;
 
     /// Return detailed build information about the `dpd` server itself.
     #[endpoint {
@@ -385,7 +382,7 @@ pub trait LldpdApi {
     }]
     async fn build_info(
         _rqctx: RequestContext<Self::Context>,
-    ) -> Result<HttpResponseOk<BuildInfo>, HttpError>;
+    ) -> Result<HttpResponseOk<latest::build_info::BuildInfo>, HttpError>;
 
     #[endpoint {
         method = GET,
@@ -394,56 +391,5 @@ pub trait LldpdApi {
     }]
     async fn switch_identifiers(
         ctx: RequestContext<Self::Context>,
-    ) -> Result<HttpResponseOk<SwitchIdentifiers>, HttpError>;
-}
-
-/// Identifiers for a switch.
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-pub struct SwitchIdentifiers {
-    /// The slot number of the switch being managed.
-    ///
-    /// MGS uses u16 for this internally.
-    pub slot: Option<u16>,
-}
-
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct SystemCapabilityPathParams {
-    pub capability: SystemCapabilities,
-}
-
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct SystemAddressPathParams {
-    pub address: IpAddr,
-}
-
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct InterfacePathParams {
-    /// The switch port on which to operate.
-    pub iface: String,
-}
-
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct InterfaceCapabilityPathParams {
-    /// The switch port on which to operate.
-    pub iface: String,
-    pub capability: SystemCapabilities,
-}
-
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct InterfaceAddressPathParams {
-    /// The switch port on which to operate.
-    pub iface: String,
-    /// Management Address to advertise on this port
-    // TODO-completeness: this should allow non-IP addresses to be specified (as
-    // per the standard) and should include an optional interface number.
-    pub address: IpAddr,
-}
-
-/**
- * Represents a cursor into a paginated request for the contents of the neighbor
- * list.
- */
-#[derive(Deserialize, Serialize, JsonSchema)]
-pub struct NeighborToken {
-    pub id: NeighborId,
+    ) -> Result<HttpResponseOk<latest::switch::SwitchIdentifiers>, HttpError>;
 }

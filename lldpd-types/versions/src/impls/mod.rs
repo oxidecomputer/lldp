@@ -4,4 +4,7 @@
 //
 // Copyright 2026 Oxide Computer Company
 
-pub use lldpd_types_versions::latest::system_info::*;
+//! Functional code for the latest versions of types.
+
+mod neighbor;
+mod system_info;
