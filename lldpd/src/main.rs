@@ -45,6 +45,8 @@ mod ffi {
 mod plat_illumos;
 #[cfg(target_os = "linux")]
 mod plat_linux;
+#[cfg(target_os = "macos")]
+mod plat_macos;
 
 /// All global state for the lldpd daemon
 pub struct Global {

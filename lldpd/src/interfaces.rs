@@ -39,6 +39,8 @@ use protocol::types::Lldpdu;
 use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
 use crate::plat_linux as plat;
+#[cfg(target_os = "macos")]
+use crate::plat_macos as plat;
 
 // How many times do we attempt to shutdown an interface before returning an
 // error to the client?  In practice this should never happen, but setting a
