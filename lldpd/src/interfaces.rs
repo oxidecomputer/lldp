@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Copyright 2024 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -39,6 +39,8 @@ use protocol::types::Lldpdu;
 use crate::plat_illumos as plat;
 #[cfg(target_os = "linux")]
 use crate::plat_linux as plat;
+#[cfg(target_os = "macos")]
+use crate::plat_macos as plat;
 
 // How many times do we attempt to shutdown an interface before returning an
 // error to the client?  In practice this should never happen, but setting a

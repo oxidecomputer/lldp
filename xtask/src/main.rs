@@ -2,13 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Copyright 2024 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
+#[cfg(any(target_os = "illumos", target_os = "linux"))]
 use std::fs;
 #[cfg(target_os = "illumos")]
 use std::io::Read;
+#[cfg(any(target_os = "illumos", target_os = "linux"))]
 use std::path::Path;
 
+#[cfg(any(target_os = "illumos", target_os = "linux"))]
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, ValueEnum};
 
@@ -23,6 +26,11 @@ use illumos as plat;
 mod linux;
 #[cfg(target_os = "linux")]
 use linux as plat;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use macos as plat;
 
 // Possible formats for a bundled dendrite distro.  Currently the two "zone"
 // package formats are helios-only.
@@ -57,6 +65,7 @@ enum Xtasks {
     },
 }
 
+#[cfg(any(target_os = "illumos", target_os = "linux"))]
 fn collect<T: ToString>(src: &str, dst: &str, files: Vec<T>) -> Result<()> {
     let src_dir = Path::new(src);
     if !src_dir.is_dir() {
@@ -84,6 +93,7 @@ fn collect<T: ToString>(src: &str, dst: &str, files: Vec<T>) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_os = "illumos", target_os = "linux"))]
 fn collect_binaries(release: bool, dst: &str) -> Result<()> {
     let src = match release {
         true => "./target/release",
