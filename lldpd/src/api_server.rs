@@ -595,6 +595,7 @@ fn launch_server(
         default_request_body_max_bytes: 10240,
         default_handler_task_mode: dropshot::HandlerTaskMode::Detached,
         log_headers: Vec::new(),
+        compression: dropshot::CompressionConfig::None,
     };
 
     dropshot::ServerBuilder::new(
