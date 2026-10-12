@@ -2198,6 +2198,7 @@ dependencies = [
  "lldpd-common",
  "lldpd-types-versions",
  "progenitor 0.15.1",
+ "progenitor-extras",
  "protocol 0.1.0",
  "reqwest 0.13.5",
  "schemars",
@@ -3102,6 +3103,17 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+]
+
+[[package]]
+name = "progenitor-extras"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fea8ab690a2c33f34256e93127c01803c3db4bdd6533572b5d68b937b973068"
+dependencies = [
+ "progenitor-client 0.15.1",
+ "reqwest 0.13.5",
+ "slog",
 ]
 
 [[package]]
