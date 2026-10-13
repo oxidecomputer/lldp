@@ -11,6 +11,7 @@ lldpd-common.workspace = true
 lldpd-types-versions.workspace = true
 protocol.workspace = true
 progenitor.workspace = true
+progenitor-extras = { workspace = true, features = ["slog"] }
 reqwest.workspace = true
 schemars.workspace = true
 serde.workspace = true

@@ -18,22 +18,15 @@ progenitor::generate_api!(
     spec = "../openapi/lldpd/lldpd-latest.json",
     interface = Positional,
     inner_type = slog::Logger,
-    pre_hook = (|log: &slog::Logger, request: &reqwest::Request| {
-        slog::trace!(log, "client request";
-            "method" => %request.method(),
-            "uri" => %request.url(),
-            "body" => ?&request.body(),
-        );
-    }),
-    post_hook = (|log: &slog::Logger, result: &Result<_, _>| {
-        slog::trace!(log, "client response"; "result" => ?result);
-    }),
+    hooks = Expected,
     derives = [PartialEq],
  replace = {
         ManagementAddress = protocol::types::ManagementAddress,
         NetworkAddress = protocol::types::NetworkAddress,
     }
 );
+
+progenitor_extras::slog_hooks::impl_slog_client_hooks!(Client);
 
 impl fmt::Display for types::MacAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
