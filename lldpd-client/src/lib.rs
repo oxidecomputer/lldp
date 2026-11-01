@@ -21,8 +21,8 @@ progenitor::generate_api!(
     hooks = Expected,
     derives = [PartialEq],
  replace = {
-        ManagementAddress = protocol::types::ManagementAddress,
-        NetworkAddress = protocol::types::NetworkAddress,
+        ManagementAddress = lldpd_types_versions::latest::system_info::ManagementAddress,
+        NetworkAddress = lldpd_types_versions::latest::system_info::NetworkAddress,
     }
 );
 

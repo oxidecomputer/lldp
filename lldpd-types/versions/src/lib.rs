@@ -37,3 +37,5 @@ pub mod latest;
 pub mod v1;
 #[path = "switch_identifiers/mod.rs"]
 pub mod v2;
+#[path = "openapi_lint/mod.rs"]
+pub mod v3;
