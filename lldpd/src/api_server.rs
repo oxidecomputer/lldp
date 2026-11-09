@@ -13,7 +13,6 @@ use std::sync::Arc;
 use dropshot::ClientSpecifiesVersionInHeader;
 use dropshot::EmptyScanParams;
 use dropshot::HttpError;
-use dropshot::HttpResponseCreated;
 use dropshot::HttpResponseDeleted;
 use dropshot::HttpResponseOk;
 use dropshot::HttpResponseUpdatedNoContent;
@@ -36,6 +35,8 @@ use lldpd_types::neighbor::Neighbor;
 use lldpd_types::neighbor::NeighborId;
 use lldpd_types::neighbor::NeighborToken;
 use lldpd_types::switch::SwitchIdentifiers;
+use lldpd_types::system_info::ChassisId;
+use lldpd_types::system_info::PortId;
 use lldpd_types::system_info::SystemAddressPathParams;
 use lldpd_types::system_info::SystemCapabilityPathParams;
 use slog::debug;
@@ -73,7 +74,7 @@ impl LldpdApi for LldpdApiImpl {
 
     async fn sys_set_chassis_id(
         rqctx: RequestContext<Self::Context>,
-        body: TypedBody<protocol::ChassisId>,
+        body: TypedBody<ChassisId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
         let val = body.into_inner();
@@ -192,13 +193,13 @@ impl LldpdApi for LldpdApiImpl {
         rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
         params: TypedBody<InterfaceAdd>,
-    ) -> Result<HttpResponseCreated<()>, HttpError> {
+    ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Arc<Global> = rqctx.context();
         let interface = path.into_inner().iface;
         let params = params.into_inner();
         let cfg = interfaces::InterfaceCfg {
-            chassis_id: params.chassis_id,
-            port_id: params.port_id,
+            chassis_id: params.chassis_id.map(protocol::ChassisId::from),
+            port_id: params.port_id.map(protocol::PortId::from),
             system_name: params.system_name,
             system_description: params.system_description,
             port_description: params.port_description,
@@ -208,7 +209,7 @@ impl LldpdApi for LldpdApiImpl {
 
         crate::interfaces::interface_add(global, interface, cfg)
             .await
-            .map(HttpResponseCreated)
+            .map(|()| HttpResponseUpdatedNoContent())
             .map_err(|e| e.into())
     }
 
@@ -304,11 +305,11 @@ impl LldpdApi for LldpdApiImpl {
     async fn interface_set_chassis_id(
         rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
-        body: TypedBody<protocol::ChassisId>,
+        body: TypedBody<ChassisId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
         let inner = path.into_inner();
-        let val = body.into_inner();
+        let val = protocol::ChassisId::from(body.into_inner());
         interfaces::chassis_id_set(global, &inner.iface, val)
             .await
             .map_err(|e| e.into())
@@ -330,11 +331,11 @@ impl LldpdApi for LldpdApiImpl {
     async fn interface_set_port_id(
         rqctx: RequestContext<Self::Context>,
         path: Path<InterfacePathParams>,
-        body: TypedBody<protocol::PortId>,
+        body: TypedBody<PortId>,
     ) -> Result<HttpResponseUpdatedNoContent, HttpError> {
         let global: &Global = rqctx.context();
         let inner = path.into_inner();
-        let val = body.into_inner();
+        let val = protocol::PortId::from(body.into_inner());
         interfaces::port_id_set(global, &inner.iface, val)
             .await
             .map_err(|e| e.into())
@@ -545,8 +546,12 @@ impl LldpdApi for LldpdApiImpl {
         ResultsPage::new(neighbors, &EmptyScanParams {}, |n: &Neighbor, _| {
             NeighborToken {
                 id: NeighborId {
-                    chassis_id: n.system_info.chassis_id.clone(),
-                    port_id: n.system_info.port_id.clone(),
+                    chassis_id: protocol::ChassisId::from(
+                        n.system_info.chassis_id.clone(),
+                    ),
+                    port_id: protocol::PortId::from(
+                        n.system_info.port_id.clone(),
+                    ),
                 },
             }
         })
