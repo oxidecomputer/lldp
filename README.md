@@ -42,7 +42,7 @@ daemon's lifecycle may still be managed with `smf`, but it will not query the
 `smf` database for configuration information.
 
 ```
-nonesuch$ pfexec pkg install -g ./lldp.p5p pkg://oxide/system/lldp
+nonesuch$ pfexec pkg install -g ./out/lldp.p5p pkg://oxide/system/lldp
            Packages to install:  1
        Create boot environment: No
 Create backup boot environment: No
